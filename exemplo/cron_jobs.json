@@ -1,0 +1,14 @@
+{
+  "jobs": [
+    {
+      "id": "rotina-diaria-exemplo",
+      "name": "rotina-diaria-exemplo",
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 12 * * 1-5",
+        "display": "0 12 * * 1-5"
+      },
+      "enabled": true
+    }
+  ]
+}

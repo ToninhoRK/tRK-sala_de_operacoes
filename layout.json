@@ -1,0 +1,70 @@
+{
+  "_ajuda": "Define em qual sala cada agente aparece. Prioridade: campo \"setor\" no agentes.json > lista \"agentes\" abaixo > \"prefixos\" (vence o prefixo mais longo) > setor \"padrao\" (NOVOS AGENTES). Jobs de cron vão sempre para o setor com tipo \"cron\". Salas vazias não aparecem. As salas crescem sozinhas conforme o número de agentes.",
+  "setores": [
+    {
+      "id": "consultas",
+      "titulo": "CONSULTAS",
+      "linha": "cima",
+      "agentes": [
+        "consulta_exemplo"
+      ],
+      "prefixos": [
+        "consulta_"
+      ]
+    },
+    {
+      "id": "operacoes",
+      "titulo": "OPERAÇÕES",
+      "linha": "cima",
+      "agentes": [
+        "rotina_exemplo",
+        "auditoria_exemplo",
+        "relatorio_exemplo"
+      ],
+      "prefixos": [
+        "rotina_",
+        "auditoria_",
+        "relatorio_"
+      ]
+    },
+    {
+      "id": "equipe",
+      "titulo": "GOVERNANÇA",
+      "linha": "cima",
+      "tipo": "equipe"
+    },
+    {
+      "id": "reuniao",
+      "titulo": "REUNIÃO",
+      "linha": "baixo",
+      "tipo": "reuniao"
+    },
+    {
+      "id": "diretoria",
+      "titulo": "DIRETORIA",
+      "linha": "baixo",
+      "tipo": "jarvis"
+    },
+    {
+      "id": "agendador",
+      "titulo": "AGENDADOR (CRON)",
+      "linha": "baixo",
+      "tipo": "cron"
+    }
+  ],
+  "padrao": {
+    "id": "novos",
+    "titulo": "NOVOS AGENTES",
+    "linha": "baixo"
+  },
+  "fluxos": [
+    [
+      "consulta_exemplo",
+      "rotina_exemplo"
+    ],
+    [
+      "cron:rotina-diaria-exemplo",
+      "rotina_exemplo"
+    ]
+  ]
+}

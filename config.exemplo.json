@@ -1,0 +1,7 @@
+{
+  "agidesk_url": "https://SUA-CONTA.agidesk.com/api/v1/",
+  "agidesk_keychain_account": "seu-usuario",
+  "agidesk_keychain_service": "nome-do-item-no-keychain",
+  "equipe_id": "0",
+  "vault_path": "~/caminho/do/seu/vault"
+}

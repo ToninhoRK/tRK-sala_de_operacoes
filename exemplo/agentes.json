@@ -1,0 +1,30 @@
+{
+  "consulta_exemplo": {
+    "descricao": "Agente de consulta fictício (somente leitura)",
+    "modelo": "modelo-exemplo",
+    "provedor": "provedor-exemplo",
+    "skills": [],
+    "max_turns": 10
+  },
+  "rotina_exemplo": {
+    "descricao": "Agente de rotina fictício",
+    "modelo": "modelo-exemplo",
+    "provedor": "provedor-exemplo",
+    "skills": [],
+    "max_turns": 10
+  },
+  "auditoria_exemplo": {
+    "descricao": "Agente de auditoria fictício",
+    "modelo": "modelo-exemplo",
+    "provedor": "provedor-exemplo",
+    "skills": [],
+    "max_turns": 10
+  },
+  "relatorio_exemplo": {
+    "descricao": "Agente de relatório fictício",
+    "modelo": "modelo-exemplo",
+    "provedor": "provedor-exemplo",
+    "skills": [],
+    "max_turns": 10
+  }
+}
