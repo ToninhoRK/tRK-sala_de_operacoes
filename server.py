@@ -231,7 +231,9 @@ def cron_dados():
     jobs = [x for x in jobs if x.get("name") not in JOBS_OCULTOS]
     execs = {}
     try:
-        con = sqlite3.connect("file:%s?mode=ro" % EXEC_DB, uri=True, timeout=5)
+        # o executions.db está em modo WAL: com mode=ro o SQLite recusa ("unable to open database file"); mode=rw + query_only lê sem poder escrever
+        con = sqlite3.connect("file:%s?mode=rw" % EXEC_DB, uri=True, timeout=5)
+        con.execute("PRAGMA query_only=ON")
         con.row_factory = sqlite3.Row
         for r in con.execute("select job_id,status,pid,started_at,finished_at,error from executions "
                              "order by claimed_at desc limit 400"):
