@@ -2,6 +2,10 @@
 
 Painel local, em visão isométrica, que mostra o estado de agentes de I.A. do [Hermes](https://hermes-agent.nousresearch.com/docs), dos jobs agendados (cron) e, opcionalmente, da fila de chamados de uma equipe no Agidesk. Cada agente é um boneco numa sala; o estado real (rodando, ok, erro) define o que ele faz.
 
+![Sala de Operações em modo demonstração: salas CONSULTAS, OPERAÇÕES, GOVERNANÇA, DIRETORIA e AGENDADOR, com um boneco por agente e por pessoa](docs/sala-de-operacoes.png)
+
+*Captura em modo demonstração (`?demo=1`), com agentes, pessoas e números fictícios.*
+
 - **Somente leitura e local:** o servidor escuta só em `127.0.0.1` (porta 8765 por padrão) e não grava nada além dos próprios arquivos de números em `~/.hermes/data/`.
 - **Sem modelo de I.A. e sem gastar tokens:** o painel só lê arquivos de histórico, o banco de estado do Hermes e a API do Agidesk.
 - **Privacidade:** o navegador recebe só nome do agente, hora, modelo e código de saída. O conteúdo das respostas nunca é enviado.

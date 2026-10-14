@@ -332,7 +332,7 @@ EQUIPE_VELHO_S = 900
 
 
 def equipe_painel():
-    """Sala GOVERNANÇA: uma pessoa por mesa, com chamados em aberto e encerrados hoje (Agidesk, equipe 13). So nomes (primeiro nome) e numeros; somente leitura.
+    """Sala GOVERNANÇA: uma pessoa por mesa, com chamados em aberto e encerrados hoje (Agidesk). So nomes (primeiro nome) e numeros; somente leitura.
     Devolve (pessoas, resumo) ou ([], None) sem dados. Leitura com mais de 15 min fica 'idle' (cinza); encerrados de outro dia aparecem como None."""
     try:
         j = json.load(open(EQUIPE_JSON, encoding="utf8"))
