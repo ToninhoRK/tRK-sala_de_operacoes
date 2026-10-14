@@ -47,3 +47,7 @@ Sem o arquivo, os scripts recusam rodar e dizem o que falta; nada é inventado.
 | `exemplo/` | dados fictícios para rodar sem o Hermes |
 
 Os jobs de cron são agendados no Hermes como jobs sem agente (`--no-agent`), apontando para os scripts acima.
+
+## Licença
+
+[MIT](LICENSE).
