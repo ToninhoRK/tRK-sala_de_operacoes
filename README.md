@@ -2,13 +2,15 @@
 
 Painel local, em visão isométrica, que mostra o estado de agentes de I.A. do [Hermes](https://hermes-agent.nousresearch.com/docs), dos jobs agendados (cron) e, opcionalmente, da fila de chamados de uma equipe no Agidesk. Cada agente é um boneco numa sala; o estado real (rodando, ok, erro) define o que ele faz.
 
-![Sala de Operações em modo demonstração: salas CONSULTAS, OPERAÇÕES, GOVERNANÇA, DIRETORIA e AGENDADOR, com um boneco por agente e por pessoa](docs/sala-de-operacoes.png)
+![Sala de Operações em modo demonstração: salas CONSULTAS, OPERAÇÕES, GOVERNANÇA, DIRETORIA e AGENDADOR, com um boneco por agente](docs/sala-de-operacoes.png)
 
-*Captura em modo demonstração (`?demo=1`), com agentes, pessoas e números fictícios.*
+*Captura em modo demonstração (`?demo=1`), com agentes e números fictícios.*
 
 - **Somente leitura e local:** o servidor escuta só em `127.0.0.1` (porta 8765 por padrão) e não grava nada além dos próprios arquivos de números em `~/.hermes/data/`.
 - **Sem modelo de I.A. e sem gastar tokens:** o painel só lê arquivos de histórico, o banco de estado do Hermes e a API do Agidesk.
 - **Privacidade:** o navegador recebe só nome do agente, hora, modelo e código de saída. O conteúdo das respostas nunca é enviado.
+- **Equipe só no total:** a sala da equipe mostra os totais (em aberto, sem responsável, encerrados hoje), nunca nome ou número por pessoa: um placar individual exposto num painel pode constranger quem está nele.
+- **Som de alerta (opcional):** botão SOM no canto do mapa. Toca uma vez quando um agente ou job falha, quando um agente fica 5 min sem ação ou quando uma fonte de dados dá problema, e um som suave quando volta ao normal. Com o som ligado, a página continua consultando mesmo com a aba escondida (a cada 10 s; o navegador pode espaçar para 1 min).
 - **Só atende o próprio computador:** pedidos com outro nome de host recebem 403 (proteção contra *DNS rebinding*).
 - **Só biblioteca padrão do Python 3.** Testado no macOS.
 
@@ -24,11 +26,11 @@ Sem o Hermes instalado, o painel abre com os dados fictícios de `exemplo/` (`ag
 ## Testar
 
 ```
-python3 testar_sala.py            # ~5 min: dados atuais, demonstração e cenários fictícios (agente novo, cron com falha, 4 e 6 pessoas)
+python3 testar_sala.py            # ~5 min: dados atuais, demonstração e cenários fictícios (agente novo, cron com falha, equipe) e a lógica do som
 python3 testar_sala.py --rapido   # ~2 min
 ```
 
-Precisa do Google Chrome (`CHROME=<caminho>` para outro local). Os cenários usam arquivos temporários; nada real é alterado. Os contadores do diagnóstico (`?debug=1`) devem ficar todos em 0.
+Precisa do Google Chrome (`CHROME=<caminho>` para outro local). Os cenários usam arquivos temporários; nada real é alterado. Os contadores do diagnóstico (`?debug=1`) devem ficar todos em 0. O teste também falha se algum nome ou número por pessoa da equipe chegar ao navegador.
 
 ## Configuração local (fora do repositório)
 
@@ -50,7 +52,7 @@ Sem o arquivo, os scripts recusam rodar e dizem o que falta; nada é inventado.
 | `server.py` | servidor HTTP local e montagem da planta |
 | `index.html` | a interface (canvas isométrico, sem dependências externas) |
 | `layout.json` | em qual sala cada agente aparece (salas, prefixos, fluxos) |
-| `equipe_agidesk.py` | job de cron (a cada 5 min): chamados em aberto e encerrados hoje por pessoa; só GET |
+| `equipe_agidesk.py` | job de cron (a cada 5 min): totais da equipe (em aberto, sem responsável, encerrados hoje); só GET, nada por pessoa |
 | `vault_contagem.py` | job de cron: contagem de notas do vault para a placa da DIRETORIA |
 | `claude_uso_poll.py` | opcional: percentual de uso do plano do Claude Code, lido com o token que o próprio Claude Code guarda |
 | `sala_config.py` | leitura da configuração local |

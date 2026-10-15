@@ -63,7 +63,7 @@ def carregar_layout():
 
 
 def montar_layout(cat, cron_ids, equipe_ids=()):
-    """Devolve (layout, origem) onde origem[id] = (setor, motivo). equipe_ids = pessoas da equipe (uma mesa cada) na sala tipo "equipe"."""
+    """Devolve (layout, origem) onde origem[id] = (setor, motivo). equipe_ids = estação da equipe (uma só, com os totais) na sala tipo "equipe"."""
     cfg = carregar_layout()
     setores = {z["id"]: dict(z, itens=[]) for z in cfg.get("setores", [])}
     padrao = cfg.get("padrao") or {"id": "novos", "titulo": "NOVOS AGENTES", "linha": "baixo"}
@@ -97,7 +97,7 @@ def montar_layout(cat, cron_ids, equipe_ids=()):
         if z.get("tipo") == "jarvis":
             setores[z["id"]]["itens"] = ["jarvis"]
             origem["jarvis"] = (z["id"], "jarvis")
-        if z.get("tipo") == "equipe":    # sala da equipe (Agidesk): uma mesa por pessoa, lida de equipe_agidesk.json; sem dados, a sala não aparece
+        if z.get("tipo") == "equipe":    # sala da equipe (Agidesk): uma estação com os totais da equipe (nada por pessoa); sem dados, a sala não aparece
             setores[z["id"]]["itens"] = list(equipe_ids)
             for pid in equipe_ids:
                 origem[pid] = (z["id"], "equipe")
@@ -388,11 +388,13 @@ EQUIPE_VELHO_S = 900
 
 
 def equipe_painel():
-    """Sala GOVERNANÇA: uma pessoa por mesa, com chamados em aberto e encerrados hoje (Agidesk). So nomes (primeiro nome) e numeros; somente leitura.
-    Devolve (pessoas, resumo) ou ([], None) sem dados. Leitura com mais de 15 min fica 'idle' (cinza); encerrados de outro dia aparecem como None."""
+    """Sala GOVERNANÇA: UMA estação com os totais da equipe no Agidesk (em aberto, sem responsável, encerrados hoje). Somente leitura.
+    NADA POR PESSOA chega ao navegador (decisão de 15/10/2026): nem nome nem número individual, mesmo se o arquivo for do formato antigo.
+    Devolve ([estação], resumo) ou ([], None) sem dados. Leitura com mais de 15 min fica 'idle' (cinza); encerrados de outro dia aparecem como None."""
     try:
         j = json.load(open(EQUIPE_JSON, encoding="utf8"))
-        membros = j["membros"]
+        if j.get("abertos_total") is None:
+            raise ValueError("sem total")
     except Exception:
         return [], None
     age = int(time.time() - (j.get("updated_at") or 0))
@@ -400,16 +402,18 @@ def equipe_painel():
     if velho:
         problema("equipe", "números da equipe do Agidesk defasados (lidos há %d min; job govti-equipe-agidesk)" % (age // 60))
     hoje_ok = j.get("dia") == datetime.now().strftime("%Y-%m-%d")
-    pessoas = []
-    for m in membros:
-        pid = str(m["id"])
-        pessoas.append({"id": "pessoa:" + pid, "kind": "pessoa", "name": (m.get("nome") or pid).split()[0],
-                        "status": "idle" if velho else "ok",
-                        "abertos": (j.get("abertos") or {}).get(pid),
-                        "encerrados": (j.get("encerrados_hoje") or {}).get(pid) if hoje_ok else None,
-                        "desc": "Pessoa da equipe Governança de TI no Agidesk (números lidos a cada 5 min)."})
+    enc = j.get("encerrados_hoje_total")
+    if enc is None and isinstance(j.get("encerrados_hoje"), dict):     # arquivo do formato antigo (por pessoa): só a soma sai daqui
+        enc = sum(v for v in j["encerrados_hoje"].values() if isinstance(v, int))
+    estacao = {"id": "equipe:agidesk", "kind": "equipe", "name": "Equipe", "status": "idle" if velho else "ok",
+               "abertos": j.get("abertos_total"), "sem_responsavel": j.get("sem_responsavel"),
+               "encerrados": enc if hoje_ok else None,
+               "desc": "Totais da equipe Governança de TI no Agidesk, lidos a cada 5 min. Sem números por pessoa."}
     resumo = {"sem_responsavel": j.get("sem_responsavel"), "abertos_total": j.get("abertos_total"), "age_s": age, "velho": velho}
-    return pessoas, resumo
+    # + 2 mesas ilustrativas (sem nome nem número; o clique abre a estação da equipe): a sala tem a profundidade da linha e, com uma mesa só, ficava vazia
+    ilustr = [{"id": "equipe:mesa%d" % i, "kind": "equipe", "decor": True, "name": "", "status": estacao["status"],
+               "desc": "Mesa ilustrativa da equipe (sem dados)."} for i in (2, 3)]
+    return [estacao] + ilustr, resumo
 
 def vault_painel():
     """Placa da DIRETORIA: total de notas do vault, variação (hoje e semana) e resultado da última conferência da auditoria. So numeros; somente leitura."""
@@ -547,15 +551,15 @@ def estado():
         "agents": len(agentes), "crons": len(crons),
         "last_activity": feed[0]["ts"] if feed else None,
     }
-    pessoas, equipe = equipe_painel()
-    layout, origem = montar_layout(cat, [c["id"] for c in crons], [p["id"] for p in pessoas])
+    est_equipe, equipe = equipe_painel()
+    layout, origem = montar_layout(cat, [c["id"] for c in crons], [p["id"] for p in est_equipe])
     jarvis = jarvis_estado()
-    for x in todos + [jarvis] + pessoas:
+    for x in todos + [jarvis] + est_equipe:
         z, motivo = origem.get(x["id"], ("", ""))
         x["setor"], x["setor_motivo"] = z, motivo
     sem_setor = [i for i, (z, m) in origem.items() if m.startswith("padrão")]
     return {"now": agora.strftime("%Y-%m-%d %H:%M:%S"), "agents": agentes, "crons": crons,
-            "feed": feed, "kpis": kp, "layout": layout, "sem_setor": sem_setor, "jarvis": jarvis, "claude_usage": claude_uso(), "vault": vault_painel(), "pessoas": pessoas, "equipe": equipe,
+            "feed": feed, "kpis": kp, "layout": layout, "sem_setor": sem_setor, "jarvis": jarvis, "claude_usage": claude_uso(), "vault": vault_painel(), "equipe_estacao": est_equipe, "equipe": equipe,
             "saude": list(SAUDE), "versao": 2}
 
 

@@ -5,18 +5,19 @@ Sobe o server.py DESTA pasta numa porta livre, em modo só leitura, e abre a pá
   - dados reais (ou os de exemplo/, sem Hermes), várias sementes e 15 min de simulação;
   - modo demonstração;
   - cenários fictícios (variáveis SALA_AGENTES/SALA_JOBS/SALA_EQUIPE, arquivos temporários; nada real é alterado):
-    agente novo sem sala, cron com falha, equipe com 4 e com 6 pessoas.
-Confere os contadores do diagnóstico (todos devem ser 0) e a API (contrato, bloqueio de Host de fora).
+    agente novo sem sala, cron com falha, equipe no formato novo (só totais) e no antigo (por pessoa).
+Confere os contadores do diagnóstico (todos devem ser 0, inclusive SOM = autoteste da lógica do som de alerta) e a API
+(contrato, bloqueio de Host de fora e NENHUM nome ou número por pessoa da equipe chegando ao navegador).
 Saída: tabela + código 0 (tudo ok) ou 1 (algum problema).
 
 Uso: python3 testar_sala.py [--rapido]      (--rapido: 1 semente e 5 min simulados por cenário)
 Precisa do Google Chrome (variável CHROME para outro caminho).
 """
-import os, re, sys, json, time, socket, shutil, tempfile, subprocess, urllib.request
+import os, pwd, re, sys, json, time, socket, shutil, tempfile, subprocess, urllib.request
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 CHROME = os.environ.get("CHROME", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
-CONTADORES = ("OVERLAPS", "ESTANTE_INVASOES", "ERROS", "VIDRO", "PAREDE", "ATRAVESSA", "EMPILHADOS", "ORDEM")
+CONTADORES = ("OVERLAPS", "ESTANTE_INVASOES", "ERROS", "VIDRO", "PAREDE", "ATRAVESSA", "EMPILHADOS", "ORDEM", "SOM")
 RAPIDO = "--rapido" in sys.argv
 
 
@@ -40,7 +41,8 @@ def subir(env_extra):
 def pagina(porta, consulta, perfil):
     out = subprocess.run([CHROME, "--headless=new", "--disable-gpu", "--no-first-run", "--user-data-dir=" + perfil,
                           "--window-size=1920,1080", "--virtual-time-budget=30000", "--dump-dom",
-                          "http://127.0.0.1:%d/?%s" % (porta, consulta)], capture_output=True, text=True, timeout=240).stdout
+                          "http://127.0.0.1:%d/?%s" % (porta, consulta)], capture_output=True, text=True, timeout=240,
+                         env=dict(os.environ, HOME=pwd.getpwuid(os.getuid()).pw_dir)).stdout   # Chrome sempre com o HOME real: com HOME vazio (teste "sem Hermes") ele trava ao abrir; o "sem Hermes" vale só para o servidor
     m = re.search(r'<pre id="dbg">(.*?)</pre>', out, re.S)
     if not m:
         return None, "página sem diagnóstico (erro ao carregar?)"
@@ -74,8 +76,8 @@ def api(porta):
     return erros, d
 
 
-def cenario_arquivos(tmp, n_pessoas, base):
-    """Catálogo real (ou de exemplo) + 2 agentes fictícios, jobs com 1 falha, equipe fictícia com n pessoas."""
+def cenario_arquivos(tmp, formato, base):
+    """Catálogo real (ou de exemplo) + 2 agentes fictícios, jobs com 1 falha, equipe fictícia no formato "novo" (só totais) ou "antigo" (por pessoa)."""
     cat = dict(base["catalogo"])
     cat["zz_sem_sala_teste"] = {"descricao": "agente fictício sem sala (teste; nome fora de qualquer prefixo)", "modelo": "modelo-teste"}
     cat["consulta_teste"] = {"descricao": "agente fictício (teste)", "modelo": "modelo-teste"}   # nome de tamanho comum: nomes > ~18 letras em sala de 1 fileira podem encostar na mesa da sala vizinha (limitação conhecida)
@@ -84,14 +86,17 @@ def cenario_arquivos(tmp, n_pessoas, base):
     if lista:
         lista[0]["last_status"] = "error"
     hoje = time.strftime("%Y-%m-%d")
-    membros = [{"id": 900 + i, "nome": "Pessoa%d Teste" % (i + 1)} for i in range(n_pessoas)]
-    eq = {"updated_at": time.time(), "dia": hoje, "membros": membros,
-          "abertos": {str(m["id"]): 10 * (i + 1) for i, m in enumerate(membros)},
-          "encerrados_hoje": {str(m["id"]): i for i, m in enumerate(membros)},
-          "sem_responsavel": 3, "abertos_total": sum(10 * (i + 1) for i in range(n_pessoas))}
+    if formato == "antigo":
+        membros = [{"id": 900 + i, "nome": "Pessoa%d Teste" % (i + 1)} for i in range(4)]
+        eq = {"updated_at": time.time(), "dia": hoje, "membros": membros,
+              "abertos": {str(m["id"]): 10 * (i + 1) for i, m in enumerate(membros)},
+              "encerrados_hoje": {str(m["id"]): i for i, m in enumerate(membros)},
+              "sem_responsavel": 3, "abertos_total": 100}
+    else:
+        eq = {"updated_at": time.time(), "dia": hoje, "abertos_total": 100, "sem_responsavel": 3, "encerrados_hoje_total": 6}
     arq = {}
     for nome, obj in (("agentes.json", cat), ("jobs.json", jobs), ("equipe.json", eq)):
-        p = os.path.join(tmp, "%d_%s" % (n_pessoas, nome)); json.dump(obj, open(p, "w")); arq[nome] = p
+        p = os.path.join(tmp, "%s_%s" % (formato, nome)); json.dump(obj, open(p, "w")); arq[nome] = p
     return {"SALA_AGENTES": arq["agentes.json"], "SALA_JOBS": arq["jobs.json"], "SALA_EQUIPE": arq["equipe.json"]}
 
 
@@ -115,15 +120,23 @@ def main():
                 linhas.append((nome,) + _rodar(porta, q, perfil, falhas, nome))
         finally:
             proc.kill()
-        for n in (4, 6):
+        for n in ("novo", "antigo"):
             env = cenario_arquivos(tmp, n, base)
             proc, porta = subir(env)
             try:
                 erros, d = api(porta)
-                falhas += ["API (cenário %d pessoas): %s" % (n, e) for e in erros]
+                falhas += ["API (cenário equipe %s): %s" % (n, e) for e in erros]
                 if "zz_sem_sala_teste" not in d["sem_setor"]:
                     falhas.append("cenário: agente sem sala não foi para NOVOS AGENTES")
-                nome = "cenário: agente novo + cron com falha + %d pessoas" % n
+                bruto = json.dumps(d, ensure_ascii=False)
+                if "Pessoa1" in bruto or '"membros":' in bruto or '"pessoa:' in bruto:   # nomes fictícios do cenário antigo, chave da lista, id antigo
+                    falhas.append("cenário equipe %s: nome ou número por pessoa chegou ao navegador" % n)
+                est = [x for x in (d.get("equipe_estacao") or []) if not x.get("decor")]
+                if any(x.get("abertos") is not None for x in d.get("equipe_estacao") or [] if x.get("decor")):
+                    falhas.append("cenário equipe %s: mesa ilustrativa com número" % n)
+                if len(est) != 1 or est[0].get("abertos") != 100 or est[0].get("encerrados") != 6 or est[0].get("sem_responsavel") != 3:
+                    falhas.append("cenário equipe %s: estação da equipe com totais errados: %s" % (n, est))
+                nome = "cenário: agente novo + cron com falha + equipe (%s)" % n
                 linhas.append((nome,) + _rodar(porta, "debug=1&seed=5&ff=%s" % ff, perfil, falhas, nome))
             finally:
                 proc.kill()

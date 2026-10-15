@@ -40,6 +40,8 @@ main{display:grid;grid-template-columns:1fr 360px;min-height:0;flex:1}
 .legend i{width:10px;height:10px;border-radius:1px;display:inline-block}
 #fit{position:absolute;right:16px;bottom:14px;background:var(--panel);color:var(--muted);border:1px solid var(--line2);font:11px var(--mono);letter-spacing:.12em;padding:6px 10px;border-radius:3px;cursor:pointer}
 #fit:hover{color:var(--text);border-color:var(--cyan)}
+#som{position:absolute;right:16px;bottom:48px;background:var(--panel);color:var(--muted);border:1px solid var(--line2);font:11px var(--mono);letter-spacing:.12em;padding:6px 10px;border-radius:3px;cursor:pointer}
+#som:hover{color:var(--text);border-color:var(--cyan)} #som.on{color:var(--cyan);border-color:var(--cyan)} #som.pend{color:var(--amber);border-color:var(--amber)}
 aside{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
 .sec{padding:14px 18px;border-bottom:1px solid var(--line)}
 .sec h2{margin:0 0 10px;font-size:10px;letter-spacing:.18em;color:var(--muted);font-weight:500;text-transform:uppercase;display:flex;justify-content:space-between}
@@ -153,6 +155,7 @@ dd{margin:0;font-family:var(--mono);font-size:12px;word-break:break-word}
       <span><i style="background:var(--idle)"></i>SEM HISTÓRICO</span>
       <span><i style="background:var(--amber)"></i>FALLBACK DE MODELO (no feed)</span>
     </div>
+    <button id="som" title="Som de alerta: toca quando um agente ou job falha, quando um agente fica 5 min sem ação ou quando uma fonte de dados dá problema; um som curto e mais suave quando volta ao normal. Ao ligar, toca um exemplo.">SOM: DESLIGADO</button>
     <button id="fit" title="Ver a planta inteira (ou duplo clique). Clique na placa de uma sala para aproximar.">AJUSTAR</button>
   </div>
   <aside>
@@ -231,7 +234,7 @@ const BINDER=['#3B5B78','#2E4A63','#5E7388','#8A6D3B','#3C6E71','#4A5568','#6B7C
 
 function build(s){
   const svg=$('svg'); svg.innerHTML='';
-  const L=s.layout, items={}; [...s.agents,...s.crons,...(s.jarvis?[s.jarvis]:[]),...(s.pessoas||[])].forEach(x=>items[x.id]=x);
+  const L=s.layout, items={}; [...s.agents,...s.crons,...(s.jarvis?[s.jarvis]:[]),...(s.equipe_estacao||[])].forEach(x=>items[x.id]=x);
   PW=L.plant.w; PH=L.plant.h; OX=PH*S+40;
   [ZONES,STATIONS,WORKERS].forEach(o=>{for(const k in o)delete o[k]}); DECOR.length=0; OBST.length=0; window.__SHELVES=[];
   const top=L.zones.filter(z=>z.y===0), bot=L.zones.filter(z=>z.y>0);
@@ -285,7 +288,7 @@ function build(s){
   L.zones.forEach(z=>z.items.forEach(id=>{
     CURZ=z.id; const it=items[id]; if(!it)return;
     const [cx,cy,,row]=pos[id];
-    const st={id,it,cx,cy,z,row,isCron:it.kind==='cron',isJarvis:it.kind==='jarvis',isPessoa:it.kind==='pessoa'};
+    const st={id,it,cx,cy,z,row,isCron:it.kind==='cron',isJarvis:it.kind==='jarvis',isEquipe:it.kind==='equipe'};
     if(st.isCron)obs('rack',cx-.6,cy-.5,cx+.6,cy+.5); else if(st.isJarvis)obs('mesa',cx-1.1,cy-.6,cx+1.1,cy+.6); else obs('mesa',cx-1,cy-.55,cx+1,cy+.55);
     st.ay=z.ay(row);
     STATIONS[id]=st; z.stations.push(st);
@@ -640,11 +643,12 @@ function stationBody(st,gBase,gOver){
     <rect class="hit" x="${av[0]-24}" y="${av[1]-14}" width="48" height="28"/>`;
   gOver.appendChild(ov);
   const lg=document.createElementNS(NS,'g'); lg.setAttribute('class','st lb idle'); lg.dataset.id=id;
-  lg.innerHTML=st.isPessoa
-    ?`<text class="nm" x="${lx}" y="${ly}">${esc(it.name).toUpperCase()}</text><text class="sx" x="${lx}" y="${ly+14}" data-r="sx">—</text>`+(st.z.cols>1?'':`<text class="sx" x="${lx}" y="${ly+27}" data-r="sy">—</text>`)+`<title>${esc(it.name)}: chamados em aberto e encerrados hoje</title>`
+  lg.innerHTML=st.isEquipe&&it.decor?''
+    :st.isEquipe
+    ?`<text class="nm" x="${lx}" y="${ly}">${esc(it.name).toUpperCase()}</text><text class="sx" x="${lx}" y="${ly+14}" data-r="sx">—</text>`+(st.z.cols>1?'':`<text class="sx" x="${lx}" y="${ly+27}" data-r="sy">—</text>`)+`<title>Equipe Governança de TI: chamados em aberto e encerrados hoje (totais da equipe, sem números por pessoa)</title>`
     :`<text class="nm" x="${lx}" y="${ly}">${esc(label(id).toUpperCase())}</text><text class="sx" x="${lx}" y="${ly+14}" data-r="sx">—</text><title>${esc(label(id))}</title>`;
   gOver.appendChild(lg);
-  [gb,gs,ov].forEach(e=>e.addEventListener('click',()=>select(id)));
+  [gb,gs,ov].forEach(e=>e.addEventListener('click',()=>select(it.decor?'equipe:agidesk':id)));   // mesa ilustrativa da equipe abre a estação da equipe
 }
 function glyph(x,y){
   const t=d=>`<path d="${d}" transform="translate(${x} ${y})"/>`;
@@ -732,11 +736,11 @@ function mkWorker(st){
     <g class="tablet" style="display:none"><rect x="-6.5" y="-31" width="13" height="9" rx="1.2" fill="#0A1118" stroke="#2BD4F2" stroke-width=".9"/><path d="M-4 -28.5H3M-4 -26H1" stroke="#2BD4F2" stroke-width=".8"/></g>
     <g class="bub" transform="translate(0,-60)" style="display:none"><rect x="-13" y="-8" width="26" height="14" rx="4"/><g class="dots"><circle cx="-6" cy="-1" r="1.7"/><circle cx="0" cy="-1" r="1.7"/><circle cx="6" cy="-1" r="1.7"/></g><text class="ex" x="0" y="3" style="display:none">!</text></g>
   </g>`;
-  root.addEventListener('click',()=>select(st.id));
+  root.addEventListener('click',()=>select(st.it.decor?'equipe:agidesk':st.id));
   const w={st,root,spr:root.querySelector('.spr'),legL:root.querySelector('.legL'),legR:root.querySelector('.legR'),armL:root.querySelector('.armL'),armR:root.querySelector('.armR'),
     legs:root.querySelector('.legs'),head:root.querySelector('.head'),eyes:root.querySelector('.eyes'),bub:root.querySelector('.bub'),dots:root.querySelector('.dots'),ex:root.querySelector('.ex'),
     tablet:root.querySelector('.tablet'),sh:root.querySelector('.sh'),dust:root.querySelector('.dust'),x:0,y:0,face:0,path:[],at:null,dest:null,run:0,timer:0,phase:rnd()*6,sit:0,status:'idle'};
-  const run=st.it.status==='running'||st.isPessoa;
+  const run=st.it.status==='running'||st.isEquipe;
   const s0=run?st.stops.home:wanderPick(w,true);
   w.at=s0; w.x=s0.pos[0]; w.y=s0.pos[1]; w.face=s0.face; w.timer=rr(2,6);
   w.item=addItem(w.x+w.y,root);
@@ -771,7 +775,7 @@ function wanderPick(w,first){
 }
 function desired(w){
   const st=w.st,s=st.it.status;
-  if(st.isPessoa)return st.stops.home;      // equipe: sempre sentada na mesa
+  if(st.isEquipe)return st.stops.home;      // equipe: sempre sentada na mesa
   if(s==='running')return st.stops.home;
   if(s==='error')return st.stops.side;
   return null;
@@ -808,7 +812,7 @@ function arrive(w){
 function poseOf(w){
   const s=w.at?w.at.type:'side', st=w.status;
   if(w.path.length)return w.run?'run':'walk';
-  if(s==='seat')return (st==='running'||w.st.isPessoa)?'type':(w.st.isJarvis?'read':'sit');
+  if(s==='seat')return (st==='running'||w.st.isEquipe)?'type':(w.st.isJarvis?'read':'sit');
   if(s==='poster')return 'think';
   if(s==='pace')return 'stand';
   if(s==='work')return st==='running'?'operate':(st==='error'?'alert':'stand');
@@ -853,7 +857,7 @@ function renderWorker(w,t){
   w.dust.style.display=m==='run'?'':'none';
   if(m==='run'){w.dust.setAttribute('transform',`translate(${(-(w.face<0?-1:1)*10).toFixed(1)} 0)`);[...w.dust.children].forEach((c,i)=>c.setAttribute('opacity',(.12+.3*Math.abs(Math.sin(t*9-i*1.3))).toFixed(2)))}
   const stuck=w.st.it.status==='running'&&w.st.it.sem_acao_s>=300;
-  const run=(m==='type'||m==='operate')&&!w.st.isPessoa&&!stuck, err=m==='alert'||((m==='type'||m==='operate')&&stuck);
+  const run=(m==='type'||m==='operate')&&!w.st.isEquipe&&!stuck, err=m==='alert'||((m==='type'||m==='operate')&&stuck);
   if(stuck!==!!w.stuck){w.stuck=stuck;w.root.classList.toggle('stuck',stuck)}
   w.bub.style.display=(run||err)?'':'none';
   if(run||err){
@@ -895,7 +899,7 @@ function initPan(){
 initPan();
 
 /* ---------- atualização com dados do servidor ---------- */
-function all(){return STATE?[...STATE.agents,...STATE.crons,...(STATE.jarvis?[STATE.jarvis]:[]),...(STATE.pessoas||[])]:[]}
+function all(){return STATE?[...STATE.agents,...STATE.crons,...(STATE.jarvis?[STATE.jarvis]:[]),...(STATE.equipe_estacao||[])]:[]}
 function setStatusClass(g,status){
   const isWk=g.classList.contains('wk');
   const extra=['lb','desk','stuck'].filter(c=>g.classList.contains(c));
@@ -945,7 +949,8 @@ function tick(){
   all().forEach(it=>{
     const g=document.querySelector('.st.lb[data-id="'+it.id+'"]'); if(!g)return;
     const sx=g.querySelector('[data-r=sx]'); let t;
-    if(it.kind==='pessoa'){
+    if(it.kind==='equipe'){
+      if(it.decor)return;
       const sy=g.querySelector('[data-r=sy]'), f=v=>v==null?'—':v;
       if(sy){sx.textContent='EM ABERTO '+f(it.abertos);sy.textContent='ENCERRADOS HOJE '+f(it.encerrados)}
       else sx.textContent='ABERTO '+f(it.abertos)+' · HOJE '+f(it.encerrados);   // equipe em 2+ colunas: 2 linhas, como as outras estações
@@ -983,10 +988,11 @@ function renderDetail(){
     add('Execuções',`${it.runs_today} hoje · ${it.runs_total} no histórico`);
     if(it.status==='running')add('Rodando há',mmss(it.elapsed_s||0)+' <span style="color:var(--dim)">(limite '+Math.round((it.timeout_s||1800)/60)+' min)</span>'+(it.sem_acao_s!=null?'<br>última ação há '+mmss(it.sem_acao_s)+(it.sem_acao_s>=300?' <span style="color:var(--amber)">sem ação: ferramenta demorando ou travado</span>':''):''));
     add('Última',it.last?`${fmtTs(it.last.ts)} · ${rel(it.last.ts)}<br>código ${it.last.code}${it.last.fallback?' · fallback':''}`:'—');
-  } else if(it.kind==='pessoa'){
+  } else if(it.kind==='equipe'){
     const eq=STATE.equipe||{}, f=v=>v==null?'—':v;
-    add('Em aberto',f(it.abertos)+' <span style="color:var(--dim)">(chamados da equipe em que é responsável)</span>');
-    add('Encerrados hoje',f(it.encerrados));
+    add('Em aberto',f(it.abertos)+' <span style="color:var(--dim)">(todos os chamados da equipe)</span>');
+    add('Sem responsável',f(it.sem_responsavel));
+    add('Encerrados hoje',f(it.encerrados)+' <span style="color:var(--dim)">(pela equipe)</span>');
     add('Lido há',eq.age_s==null?'—':(eq.age_s<90?'instantes':Math.round(eq.age_s/60)+' min')+(eq.velho?' (defasado)':''));
   } else if(it.kind==='jarvis'){
     add('Papel','Hermes principal: o modelo com quem você conversa e que aciona os agentes');
@@ -999,9 +1005,9 @@ function renderDetail(){
     add('Checagens hoje',`${it.checks_today}${it.failed_today?' · '+it.failed_today+' com falha':''}`);
   }
   const rec=(it.recent||[]).slice(0,5).map(e=>`<div class="mini"><span>${fmtTs(e.ts)}</span><span>${modelShort(e.model)}</span><span style="color:var(--${e.code?'red':'green'})">${e.code?'ERRO':'OK'}</span></div>`).join('');
-  d.innerHTML=`<h2>Estação <span>${it.kind==='cron'?'AGENDADOR':(it.kind==='jarvis'?'HERMES PRINCIPAL':(it.kind==='pessoa'?'EQUIPE AGIDESK':'AGENTE'))}</span></h2>
-    <div class="nm">${esc(it.kind==='pessoa'?it.name:label(it.id))} <span class="chip ${it.status}">${(it.kind==='jarvis'?JSTL:STL)[it.status]}</span></div>
-    <div class="ds">${esc(it.desc)}</div><dl>${rows}</dl>${rec?'<h2 style="margin:14px 0 4px">Últimas execuções</h2>'+rec:''}`;
+  d.innerHTML=`<h2>Estação <span>${it.kind==='cron'?'AGENDADOR':(it.kind==='jarvis'?'HERMES PRINCIPAL':(it.kind==='equipe'?'EQUIPE AGIDESK':'AGENTE'))}</span></h2>
+    <div class="nm">${esc(it.kind==='equipe'?it.name:label(it.id))} <span class="chip ${it.status}">${(it.kind==='jarvis'?JSTL:STL)[it.status]}</span></div>
+    <div class="ds">${esc(it.desc)}</div><dl>${rows}</dl>${it.kind==='equipe'?'<div class="ds" style="margin-top:8px">Só totais da equipe: a Sala não mostra números por pessoa.</div>':''}${rec?'<h2 style="margin:14px 0 4px">Últimas execuções</h2>'+rec:''}`;
 }
 function setLive(ok){const p=$('live');p.classList.toggle('off',!ok);p.querySelector('span').textContent=ok?'AO VIVO':'SEM CONEXÃO'}
 
@@ -1087,13 +1093,87 @@ function debugReport(){
   const wc=wallCheck(), dc=decorCheck(), at=Object.entries(PROBE.hits).sort((a,b)=>b[1]-a[1]), em=Object.entries(PROBE.stack);
   pre.textContent+='\nVIDRO '+wc.length+'\n'+wc.join('\n')+'\nPAREDE '+dc.length+'\n'+dc.join('\n')
     +'\nATRAVESSA '+at.length+'\n'+at.map(([k,v])=>k+' · '+v+' quadros').join('\n')+'\nEMPILHADOS '+em.length+'\n'+em.map(([k,v])=>k+' · '+v+' quadros').join('\n')+'\nORDEM '+Object.keys(PROBE.ordem).length+'\n'+Object.entries(PROBE.ordem).map(([k,v])=>k+' · '+v+' quadros').join('\n');
+  const sa=somAutoteste(); pre.textContent+='\nSOM '+sa.length+'\n'+sa.join('\n');
   pre.textContent+='\nTESTE\n'+(window.__log||[]).join('\n'); document.body.appendChild(pre);
 }
 window.__errs=[]; const errPush=m=>{if(window.__errs.length<50)window.__errs.push(m)};
 window.addEventListener('error',e=>errPush(e.message+' @'+e.lineno));
 
+/* ---------- som de alerta (só na página; outros canais, Teams/e-mail, ficam no roadmap) ----------
+   Compara cada leitura com a anterior e toca UMA vez por evento: falha nova de agente/job (status vira erro ou o contador de
+   falhas de hoje sobe), agente que passa a ficar 5 min sem ação, fonte de dados que passa a dar problema; som suave quando
+   uma falha volta a OK. A 1ª leitura só guarda a base (abrir a página não toca pelos erros antigos). O navegador só libera
+   áudio depois de um clique: com o som ligado e a página recarregada, o botão fica âmbar até o 1º clique na página. */
+const SOM={on:localStorage.getItem('sala_som')==='1',ctx:null,prev:null,ult:0};
+function somFoto(s){
+  const it={};
+  (s.agents||[]).forEach(a=>it[a.id]={st:a.status,err:a.errors_today||0,stuck:a.status==='running'&&a.sem_acao_s>=300});
+  (s.crons||[]).forEach(c=>it[c.id]={st:c.status,err:c.failed_today||0,stuck:false});
+  return {it,saude:new Set((s.saude||[]).map(x=>x.fonte))};
+}
+function somEventos(a,b){              // a = foto anterior, b = atual; devolve [[tipo,id],...] com tipo falha | aviso | volta
+  const ev=[];                         // bad = está em falha até voltar a OK (erro → rodando → ok também conta como "voltou")
+  Object.entries(b.it).forEach(([id,c])=>{const p=a&&a.it[id]; c.bad=c.st==='error'||(!!p&&!!p.bad&&c.st!=='ok'); if(!p)return;
+    if((c.st==='error'&&p.st!=='error')||c.err>p.err)ev.push(['falha',id]);
+    else if(c.stuck&&!p.stuck)ev.push(['aviso',id]);
+    else if(p.bad&&c.st==='ok')ev.push(['volta',id]);});
+  if(!a)return ev;
+  b.saude.forEach(f=>{if(!a.saude.has(f))ev.push(['aviso','saude:'+f])});
+  return ev;
+}
+function somCtx(){
+  const C=window.AudioContext||window.webkitAudioContext; if(!C)return null;
+  if(!SOM.ctx)SOM.ctx=new C(); if(SOM.ctx.state==='suspended')SOM.ctx.resume().then(somBotao,()=>{});
+  return SOM.ctx;
+}
+function somTocar(tipo){
+  const c=somCtx(); if(!c||c.state!=='running')return false;
+  const notas={falha:[[880,0],[660,.2],[880,.4],[660,.6]],aviso:[[587,0],[587,.25]],volta:[[523,0],[784,.14]]}[tipo]||[];
+  const vol=tipo==='volta'?.08:.16, t0=c.currentTime+.02;
+  notas.forEach(([f,t])=>{const o=c.createOscillator(),g=c.createGain();o.type=tipo==='falha'?'triangle':'sine';o.frequency.value=f;
+    g.gain.setValueAtTime(0,t0+t);g.gain.linearRampToValueAtTime(vol,t0+t+.015);g.gain.exponentialRampToValueAtTime(.0005,t0+t+.18);
+    o.connect(g).connect(c.destination);o.start(t0+t);o.stop(t0+t+.2)});
+  return true;
+}
+function somBotao(){const b=$('som'); if(!b)return; const pend=SOM.on&&(!SOM.ctx||SOM.ctx.state!=='running');
+  b.textContent=!SOM.on?'SOM: DESLIGADO':(pend?'SOM: CLIQUE NA PÁGINA':'SOM: LIGADO'); b.classList.toggle('on',SOM.on&&!pend); b.classList.toggle('pend',pend)}
+function somChecar(s){
+  if(DEMO)return;                      // dados simulados: não toca
+  const f=somFoto(s), a=SOM.prev; SOM.prev=f; const ev=somEventos(a,f);   // sempre calcula (mantém o "em falha" de cada um), mesmo com o som desligado
+  if(!a||!SOM.on||!ev.length)return;
+  const tipo=['falha','aviso','volta'].find(t=>ev.some(e=>e[0]===t));   // vários eventos na mesma leitura: um som só, o mais grave
+  somTocar(tipo);
+}
+if($('som')){
+  $('som').addEventListener('click',e=>{e.stopPropagation();SOM.on=!SOM.on;localStorage.setItem('sala_som',SOM.on?'1':'0');
+    if(SOM.on){somCtx();setTimeout(()=>{somTocar('falha');somBotao()},60)} somBotao()});
+  ['pointerdown','keydown'].forEach(t=>document.addEventListener(t,()=>{if(SOM.on&&SOM.ctx?.state!=='running'){somCtx()}else if(SOM.on&&!SOM.ctx)somCtx()},{passive:true}));
+  somBotao();
+}
+// teste de lógica do som (?debug=1): eventos esperados para leituras fictícias; vai para o contador SOM do diagnóstico
+function somAutoteste(){
+  const F=(it,sd)=>({it,saude:new Set(sd||[])}), r=[];
+  const casos=[
+    ['erro novo',F({a:{st:'ok',err:0}}),F({a:{st:'error',err:1}}),'falha'],
+    ['erro de novo (já estava em erro)',F({a:{st:'error',err:1,bad:true}}),F({a:{st:'error',err:2}}),'falha'],
+    ['continua em erro, sem falha nova',F({a:{st:'error',err:1,bad:true}}),F({a:{st:'error',err:1}}),''],
+    ['voltou a OK',F({a:{st:'error',err:1,bad:true}}),F({a:{st:'ok',err:1}}),'volta'],
+    ['erro → rodando (ainda não voltou)',F({a:{st:'error',err:1,bad:true}}),F({a:{st:'running',err:1}}),''],
+    ['rodando depois de erro → OK',F({a:{st:'running',err:1,bad:true}}),F({a:{st:'ok',err:1}}),'volta'],
+    ['OK normal → rodando → OK',F({a:{st:'running',err:0,bad:false}}),F({a:{st:'ok',err:0}}),''],
+    ['passou a ficar sem ação',F({a:{st:'running',err:0,stuck:false}}),F({a:{st:'running',err:0,stuck:true}}),'aviso'],
+    ['continua sem ação',F({a:{st:'running',err:0,stuck:true}}),F({a:{st:'running',err:0,stuck:true}}),''],
+    ['fonte de dados com problema',F({},[]),F({},['jobs.json']),'aviso'],
+    ['agente novo já em erro (sem base)',F({}),F({b:{st:'error',err:1}}),''],
+    ['virada do dia (contador zera)',F({a:{st:'ok',err:3}}),F({a:{st:'ok',err:0}}),''],
+  ];
+  casos.forEach(([n,a,b,esp])=>{const ev=somEventos(a,b).map(e=>e[0]).join(',');if(ev!==esp)r.push('som: '+n+' → "'+ev+'" (esperado "'+esp+'")')});
+  return r;
+}
+
 async function poll(){
-  if(document.hidden&&built&&!DBG)return;     // aba escondida: sem consulta (o laço de animação o navegador já pausa)
+  if(document.hidden&&built&&!DBG&&(!SOM.on||Date.now()-SOM.ult<10000))return;   // aba escondida: sem consulta; com o som ligado, 1 consulta a cada 10 s para o alerta tocar
+  SOM.ult=Date.now();
   try{const r=await fetch('/api/state',{cache:'no-store'});const s=await r.json();if(DEMO)demo(s);
     const sig=JSON.stringify(s.layout.zones.map(z=>[z.id,z.items,z.w,z.h]));
     if(!built||sig!==SIG){const first=!built;SIG=sig;build(s);STATE=s;update(s);const ff=first?+(QS.get('ff')||0):0;for(let t=0;t<ff;t+=.1)sim(.1)
@@ -1105,7 +1185,7 @@ async function poll(){
         L.push('chegou em '+(arr===null?'NUNCA':arr.toFixed(1)+' s')+' | correndo '+runT.toFixed(1)+' s | distância '+dist.toFixed(1)+' | maior passo/frame '+maxStep.toFixed(2)+' | pose final '+poseOf(w));
         window.__log=L}
     }
-    update(s);setLive(true)}catch(e){errPush(String(e&&e.stack||e));setLive(false)}
+    update(s);somChecar(s);setLive(true)}catch(e){errPush(String(e&&e.stack||e));setLive(false)}
 }
 if(QS.has('debug')){poll().then(()=>setTimeout(debugReport,300))}
 else{poll();setInterval(poll,1000);setInterval(tick,1000);requestAnimationFrame(loop);document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll()})}
