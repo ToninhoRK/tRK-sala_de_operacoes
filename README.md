@@ -1,10 +1,26 @@
 # Sala de Operações
 
+🇧🇷 **Português** · 🇺🇸 [English](README.en.md)
+
 **Veja seus agentes de I.A. trabalhando.** A Sala de Operações transforma agentes, rotinas agendadas e a fila da equipe num escritório vivo, em que cada agente é um funcionário com mesa própria. Quem está rodando aparece sentado, digitando. Quem falhou se levanta e pede ajuda. Basta olhar para saber como a operação está, sem abrir log nem terminal.
 
 ![Sala de Operações: planta isométrica com salas, mesas e um funcionário por agente](docs/sala-de-operacoes.png)
 
 <sub>Todas as capturas usam o modo demonstração, com agentes e números fictícios.</sub>
+
+## Sumário
+
+- [Quatro jeitos de ver a mesma operação](#quatro-jeitos-de-ver-a-mesma-operação)
+  - [Planta](#planta-o-dia-a-dia) · [Modo TV](#modo-tv-para-a-parede-da-sala) · [3D](#3d-a-mesma-sala-com-volume) · [Pixel art](#pixel-art-a-mesma-sala-com-cara-de-jogo)
+- [O que você enxerga de relance](#o-que-você-enxerga-de-relance)
+- [Destaques](#destaques)
+- [Requisitos](#requisitos)
+- [Comece em um minuto](#comece-em-um-minuto)
+- [Personalize](#personalize)
+- [Privacidade e segurança](#privacidade-e-segurança)
+- [Qualidade](#qualidade)
+- [Feito com](#feito-com)
+- [Licença](#licença)
 
 ---
 
@@ -106,6 +122,7 @@ Dois níveis de teste acompanham o projeto:
 
 - `python3 testes_servidor.py`: em cerca de um segundo, confere a lógica do servidor com dados fictícios (estados, atraso, início e fim de execução, consumo, privacidade da equipe e as travas de segurança). Roda também no GitHub a cada envio, em Python 3.9 e 3.13.
 - `python3 testar_sala.py`: abre a página num navegador em vários cenários (dados reais, demonstração, Modo TV, 3D, pixel art, a pasta entre salas, atrasos, agentes novos e falhas) e reprova qualquer rótulo sobreposto, objeto fora do lugar, erro de script ou dado individual da equipe.
+- `python3 .github/checar_readmes.py`: confere que este README e a versão em inglês têm as mesmas seções, capturas, tabelas e links. Roda no GitHub a cada envio, para as duas versões nunca ficarem diferentes.
 
 ## Feito com
 
