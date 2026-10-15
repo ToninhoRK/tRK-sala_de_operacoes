@@ -651,11 +651,58 @@ class H(BaseHTTPRequestHandler):
                 ag = (parse_qs(urlparse(self.path).query).get("agent") or [""])[0]
                 self._send(200, json.dumps(atividade(ag), ensure_ascii=False).encode("utf8"), "application/json; charset=utf-8")
             elif p in ("/", "/index.html"):
-                self._send(200, open(os.path.join(AQUI, "index.html"), "rb").read(), "text/html; charset=utf-8")
+                self._send(200, pagina_montada(), "text/html; charset=utf-8")
+            elif p == "/3d":                   # endereço antigo do protótipo 3D: o 3D agora é um tema da própria Sala
+                self.send_response(302)
+                self.send_header("Location", "/?tema=3d" + ("&" + self.path.split("?", 1)[1] if "?" in self.path else ""))
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+            elif p.startswith("/web/"):
+                arq = arquivo_web(p)
+                if arq:
+                    self._send(200, open(arq, "rb").read(), TIPOS_WEB[os.path.splitext(arq)[1]])
+                else:
+                    self._send(404, b"not found", "text/plain")
             else:
                 self._send(404, b"not found", "text/plain")
         except Exception as e:
             self._send(500, ("erro: %s" % e).encode("utf8"), "text/plain; charset=utf-8")
+
+
+WEB = os.path.join(AQUI, "web")        # CSS e JS da página (index.html), inclusive o tema 3D e o Three.js
+TIPOS_WEB = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8",
+             ".svg": "image/svg+xml", ".png": "image/png", ".txt": "text/plain; charset=utf-8"}
+
+
+def pagina_montada():
+    """index.html com o CSS e os scripts de web/ embutidos (um documento só). O código fica separado por assunto em web/,
+    mas o navegador recebe tudo de uma vez: sem corrida entre arquivos (o Chrome headless dos testes às vezes salvava
+    a página antes de baixar os scripts) e com um pedido só. Cada script leva //# sourceURL para o erro citar o arquivo."""
+    html = open(os.path.join(AQUI, "index.html"), encoding="utf8").read()
+
+    def conteudo(caminho):
+        arq = arquivo_web(caminho)
+        return open(arq, encoding="utf8").read().replace("</script", "<\\/script") if arq else None
+
+    def css(m):
+        txt = conteudo(m.group(1))
+        return m.group(0) if txt is None else "<style>\n" + txt + "</style>"
+
+    def js(m):
+        txt = conteudo(m.group(1))
+        return m.group(0) if txt is None else "<script>\n" + txt + "\n//# sourceURL=" + m.group(1) + "\n</script>"
+    html = re.sub(r'<link rel="stylesheet" href="(/web/[^"]+\.css)">', css, html)
+    html = re.sub(r'<script src="(/web/[^"]+\.js)"></script>', js, html)
+    return html.encode("utf8")
+
+
+def arquivo_web(caminho):
+    """Arquivo pedido em /web/... só se estiver DENTRO da pasta web/ (sem ../ nem link para fora) e for de um tipo da lista."""
+    from urllib.parse import unquote
+    alvo = os.path.realpath(os.path.join(WEB, unquote(caminho[len("/web/"):])))
+    if not alvo.startswith(os.path.realpath(WEB) + os.sep) or os.path.splitext(alvo)[1] not in TIPOS_WEB or not os.path.isfile(alvo):
+        return None
+    return alvo
 
 
 if __name__ == "__main__":

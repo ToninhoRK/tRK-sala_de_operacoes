@@ -5,7 +5,10 @@ Sobe o server.py DESTA pasta numa porta livre, em modo só leitura, e abre a pá
   - dados reais (ou os de exemplo/, sem Hermes), várias sementes e 15 min de simulação;
   - modo demonstração;
   - cenários fictícios (variáveis SALA_AGENTES/SALA_JOBS/SALA_EQUIPE, arquivos temporários; nada real é alterado):
-    agente novo sem sala, cron com falha, equipe no formato novo (só totais) e no antigo (por pessoa).
+    agente novo sem sala, cron com falha, equipe no formato novo (só totais) e no antigo (por pessoa);
+  - Modo TV, animação desligada + só rótulos de problema, rótulos nomes + rodando e falha, e o tema 3D (WebGL, estações,
+    bonecos, texturas de parede, sombra, diagnóstico da planta com o 3D ligado, /3d redirecionando);
+  - a rota de arquivos /web/ recusando caminhos para fora da pasta web/.
 Confere os contadores do diagnóstico (todos devem ser 0, inclusive SOM = autoteste da lógica do som de alerta) e a API
 (contrato, bloqueio de Host de fora e NENHUM nome ou número por pessoa da equipe chegando ao navegador).
 Saída: tabela + código 0 (tudo ok) ou 1 (algum problema).
@@ -43,7 +46,7 @@ def pagina(porta, consulta, perfil):
                           "--window-size=1920,1080", "--virtual-time-budget=30000", "--dump-dom",
                           "http://127.0.0.1:%d/?%s" % (porta, consulta)], capture_output=True, text=True, timeout=240,
                          env=dict(os.environ, HOME=pwd.getpwuid(os.getuid()).pw_dir)).stdout   # Chrome sempre com o HOME real: com HOME vazio (teste "sem Hermes") ele trava ao abrir; o "sem Hermes" vale só para o servidor
-    m = re.search(r'<pre id="dbg">(.*?)</pre>', out, re.S)
+    m = re.search(r'<pre id="dbg">(OVERLAPS .*?)</pre>', out, re.S)   # o relatório começa sempre por OVERLAPS (o código da página vem embutido no HTML)
     if not m:
         return None, "página sem diagnóstico (erro ao carregar?)"
     txt = m.group(1)
@@ -68,12 +71,59 @@ def api(porta):
     for e in d["feed"]:
         if e.get("status") and not e.get("running") and (e["status"] == "error") != (e.get("code") != 0):
             erros.append("feed com status incoerente: %s" % e); break
+    for caminho in ("/web/../server.py", "/web/%2e%2e/server.py", "/web/js/../../layout.json", "/web/vendor/three/../../../sala_config.py"):
+        try:   # a rota de arquivos (/web/) não pode entregar nada fora da pasta web/
+            urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:%d%s" % (porta, caminho))); erros.append("rota /web/ entregou " + caminho)
+        except urllib.error.HTTPError as e:
+            if e.code != 404: erros.append("rota /web/ com %s: código %d (esperado 404)" % (caminho, e.code))
     req = urllib.request.Request("http://127.0.0.1:%d/api/state" % porta, headers={"Host": "site-de-fora.exemplo"})
     try:
         urllib.request.urlopen(req); erros.append("Host de fora foi atendido (deveria ser 403)")
     except urllib.error.HTTPError as e:
         if e.code != 403: erros.append("Host de fora: código %d (esperado 403)" % e.code)
     return erros, d
+
+
+def teste_3d(porta, perfil):
+    """Tema 3D (/?tema=3d&debug=1, com demonstração): WebGL abre (SwiftShader no headless), cada estação e cada boneco da
+    planta tem a sua peça 3D, os objetos de parede viram textura, a sombra escurece o piso à frente de um rack (sonda),
+    nenhum erro de script e o diagnóstico da planta continua zerado com o 3D ligado. E o endereço antigo /3d redireciona."""
+    erros = []
+    try:
+        final = urllib.request.urlopen("http://127.0.0.1:%d/3d" % porta).geturl()
+        if "tema=3d" not in final: erros.append("3D: /3d não levou ao tema 3D (%s)" % final)
+    except Exception as e:
+        erros.append("3D: /3d falhou: %s" % e)
+    m = None
+    for tentativa in range(3):     # Three.js carregado em rede (import dinâmico): o headless às vezes salva a página antes; repete
+        out = subprocess.run([CHROME, "--headless=new", "--no-first-run", "--use-angle=swiftshader", "--enable-unsafe-swiftshader",
+                              "--user-data-dir=" + perfil + "3d", "--window-size=1600,900", "--virtual-time-budget=15000", "--dump-dom",
+                              "http://127.0.0.1:%d/?tema=3d&debug=1&demo=1&seed=4&ff=30" % porta], capture_output=True, text=True, timeout=240,
+                             env=dict(os.environ, HOME=pwd.getpwuid(os.getuid()).pw_dir)).stdout
+        m = re.search(r'<pre id="dbg3d"[^>]*>(.*?)</pre>', out, re.S)
+        if m and "SOMBRA ok com" in m.group(1):
+            break
+    if not m:
+        return erros + ["3D: página sem relatório (não carregou)"]
+    v = dict(l.split(" ", 1) for l in m.group(1).splitlines() if " " in l and l.split(" ", 1)[0].isupper())
+    if v.get("WEBGL") != "ok": erros.append("3D: WebGL não abriu")
+    if v.get("ESTACOES") != v.get("ESPERADAS"): erros.append("3D: %s estações de %s esperadas" % (v.get("ESTACOES"), v.get("ESPERADAS")))
+    b = (v.get("BONECOS") or "0 DE ?").split(" DE ")
+    if b[0] != b[-1] or b[0] == "0": erros.append("3D: bonecos %s" % v.get("BONECOS"))
+    if int(v.get("DECALS") or 0) < 3: erros.append("3D: objetos de parede não viraram textura (%s)" % v.get("DECALS"))
+    s = re.match(r"ok com (\d+)/\S* sem (\d+)/", v.get("SOMBRA") or "")
+    sombra = bool(s) and int(s.group(1)) < .85 * int(s.group(2))
+    if not sombra: erros.append("3D: a sombra não aparece no piso (%s)" % v.get("SOMBRA"))
+    if v.get("ERROS") != "0": erros.append("3D: erros de script: " + m.group(1)[-400:])
+    d = re.search(r'<pre id="dbg">(OVERLAPS .*?)</pre>', out, re.S)
+    if d:
+        ruins = {k: n for k, n in re.findall(r"^([A-Z_]+) (\d+)", d.group(1), re.M) if n != "0"}
+        if ruins: erros.append("3D: diagnóstico da planta com o 3D ligado: %s" % ruins)
+    else:
+        erros.append("3D: diagnóstico da planta ausente com o 3D ligado")
+    print("3D: WebGL %s, %s/%s estações, bonecos %s, %s texturas de parede, sombra %s, %s erros" % (v.get("WEBGL"), v.get("ESTACOES"), v.get("ESPERADAS"),
+          v.get("BONECOS"), v.get("DECALS"), "ok" if sombra else "FALHOU", v.get("ERROS")))
+    return erros
 
 
 def cenario_arquivos(tmp, formato, base):
@@ -116,8 +166,13 @@ def main():
                     "jobs": json.load(open(_jobs()))}
             casos = [("dados atuais · semente %d" % s, "debug=1&seed=%d&ff=%s" % (s, ff)) for s in sementes]
             casos.append(("demonstração", "debug=1&demo=1&seed=4&ff=%s&jarvis=running" % ff))
+            casos.append(("Modo TV", "debug=1&tema=tv&seed=2&ff=%s" % ff))
+            casos.append(("Modo TV · demonstração", "debug=1&tema=tv&demo=1&travado=1&seed=4&ff=%s&jarvis=running" % ff))
+            casos.append(("animação desligada · só rodando e falha", "debug=1&anim=desligada&rotulos=problemas&demo=1&seed=3&ff=60"))
+            casos.append(("rótulos: nomes + rodando e falha", "debug=1&rotulos=ativos&demo=1&seed=5&ff=%s" % ff))
             for nome, q in casos:
                 linhas.append((nome,) + _rodar(porta, q, perfil, falhas, nome))
+            falhas += teste_3d(porta, perfil)
         finally:
             proc.kill()
         for n in ("novo", "antigo"):

@@ -10,7 +10,7 @@ Painel local, em visão isométrica, que mostra o estado de agentes de I.A. do [
 - **Sem modelo de I.A. e sem gastar tokens:** o painel só lê arquivos de histórico, o banco de estado do Hermes e a API do Agidesk.
 - **Privacidade:** o navegador recebe só nome do agente, hora, modelo e código de saída. O conteúdo das respostas nunca é enviado.
 - **Equipe só no total:** a sala da equipe mostra os totais (em aberto, sem responsável, encerrados hoje), nunca nome ou número por pessoa: um placar individual exposto num painel pode constranger quem está nele.
-- **Som de alerta (opcional):** botão SOM no canto do mapa. Toca uma vez quando um agente ou job falha, quando um agente fica 5 min sem ação ou quando uma fonte de dados dá problema, e um som suave quando volta ao normal. Com o som ligado, a página continua consultando mesmo com a aba escondida (a cada 10 s; o navegador pode espaçar para 1 min).
+- **Som de alerta (ligado por padrão):** botão SOM no canto do mapa, acima do CENTRALIZAR; desligar fica salvo no navegador. Toca uma vez quando um agente ou job falha, quando um agente fica 5 min sem ação ou quando uma fonte de dados dá problema, e um som suave quando volta ao normal. Regra do navegador: o áudio só sai depois do primeiro clique ou tecla na página (a página libera sozinha nesse momento; numa TV, abrir o Chrome com `--autoplay-policy=no-user-gesture-required` dispensa o clique). Com o som ligado, a página continua consultando mesmo com a aba escondida (a cada 10 s; o navegador pode espaçar para 1 min).
 - **Só atende o próprio computador:** pedidos com outro nome de host recebem 403 (proteção contra *DNS rebinding*).
 - **Só biblioteca padrão do Python 3.** Testado no macOS.
 
@@ -23,10 +23,25 @@ python3 server.py 8800       # outra porta
 
 Sem o Hermes instalado, o painel abre com os dados fictícios de `exemplo/` (`agentes.json`, `cron_jobs.json`). Acrescente `?demo=1` à URL para ver os estados de exemplo (rodando, erro, ocioso).
 
+## Temas e preferências
+
+Botão **CONFIGURAR** no cabeçalho (fica salvo no navegador; a URL tem prioridade e não grava):
+
+| Opção | Valores | Na URL |
+|---|---|---|
+| Tema | Planta isométrica, **Modo TV** (sem painel lateral, números grandes e uma coluna "AGORA" com o que está rodando, falhou ou está sem ação, em letra grande), **3D** (a mesma planta em 3D de verdade) | `?tema=tv`, `?tema=3d` |
+| Animação | completa, reduzida (15 quadros/s, sem pulsos), desligada (ninguém anda) | `?anim=reduzida` |
+| Rótulos das estações | todos, nomes + rodando e falha (sem a linha "ÚLT."), só rodando e falha, nenhum | `?rotulos=ativos` |
+| Som de alerta | ligado (padrão) ou desligado | |
+
+![Tema 3D com dados simulados: a mesma planta, com volume, luz e sombra](docs/sala-3d.png)
+
+O **tema 3D** (`?tema=3d`) é a mesma planta desenhada em 3D de verdade: mesmo ângulo, mesmos móveis, bonecos, cores e rótulos, com volume, luz e sombra. A planta continua sendo montada em SVG (rotas, rótulos, diagnóstico); durante a montagem cada ponto e cada caixa é anotado com a coordenada 3D, e uma câmera ortográfica no ângulo exato da planta desenha a cena por baixo dos rótulos. Usa [Three.js](https://threejs.org) r170, incluído em `web/vendor/three/` (licença MIT, ver o `LICENSE` da pasta): funciona sem internet e sem CDN. Sem WebGL, a página volta para a planta.
+
 ## Testar
 
 ```
-python3 testar_sala.py            # ~5 min: dados atuais, demonstração e cenários fictícios (agente novo, cron com falha, equipe) e a lógica do som
+python3 testar_sala.py            # ~6 min: dados atuais, demonstração, Modo TV, animação desligada, cenários fictícios (agente novo, cron com falha, equipe), lógica do som e o 3D
 python3 testar_sala.py --rapido   # ~2 min
 ```
 
@@ -49,8 +64,11 @@ Sem o arquivo, os scripts recusam rodar e dizem o que falta; nada é inventado.
 
 | Arquivo | Função |
 |---|---|
-| `server.py` | servidor HTTP local e montagem da planta |
-| `index.html` | a interface (canvas isométrico, sem dependências externas) |
+| `server.py` | servidor HTTP local, montagem da planta e entrega da página (embute o CSS e os scripts de `web/` num documento só) |
+| `index.html` | esqueleto da interface (cabeçalho, indicadores, painel lateral) |
+| `web/js/` | o código da página, separado por assunto e carregado em ordem: `base`, `config` (temas e preferências), `planta`, `funcionarios`, `interface`, `diagnostico`, `som`, `planta3d` (tema 3D), `principal` |
+| `web/css/sala.css` | estilos, inclusive Modo TV |
+| `web/vendor/three/` | cópia do Three.js (MIT) usada pelo tema 3D |
 | `layout.json` | em qual sala cada agente aparece (salas, prefixos, fluxos) |
 | `equipe_agidesk.py` | job de cron (a cada 5 min): totais da equipe (em aberto, sem responsável, encerrados hoje); só GET, nada por pessoa |
 | `vault_contagem.py` | job de cron: contagem de notas do vault para a placa da DIRETORIA |
