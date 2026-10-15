@@ -171,7 +171,7 @@ body.tv #tvlista{display:flex;flex-direction:column;border-left:1px solid var(--
 #tvitens{flex:1;min-height:0;overflow:hidden}
 #tvlista .it{padding:10px 0 10px 14px;border-left:4px solid var(--c);margin-bottom:10px;--c:var(--idle)}
 #tvlista .it.running{--c:var(--cyan)} #tvlista .it.error{--c:var(--red)} #tvlista .it.stuck{--c:var(--amber)}
-#tvlista .it b{display:block;font:600 22px var(--mono);letter-spacing:.02em;color:var(--text);word-break:break-all}
+#tvlista .it b{display:block;font:600 22px var(--mono);letter-spacing:.02em;color:var(--text);overflow-wrap:anywhere}   /* quebra preferida: depois de _ ou : (<wbr> no renderTV) */
 #tvlista .it span{display:block;font:600 21px var(--mono);color:var(--c);margin-top:3px}
 #tvlista .calmo{font:600 24px var(--sans);color:var(--green);padding-top:8px}
 #tvlista .calmo span{font:400 16px var(--sans);color:var(--muted)}

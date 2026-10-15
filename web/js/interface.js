@@ -143,7 +143,7 @@ function renderTV(){
     else if(it.status==='running')o={c:'running',p:2,t:'RODANDO '+mmss((it.elapsed_s||0)+el0)};
     return o&&Object.assign(o,{n:label(it.id).toUpperCase()});
   }).filter(Boolean).sort((a,b)=>a.p-b.p||a.n.localeCompare(b.n));
-  $('tvitens').innerHTML=L.length?L.map(o=>`<div class="it ${o.c}"><b>${esc(o.n)}</b><span>${esc(o.t)}</span></div>`).join('')
+  $('tvitens').innerHTML=L.length?L.map(o=>`<div class="it ${o.c}"><b>${esc(o.n).replace(/([_:·])/g,'$1<wbr>')}</b><span>${esc(o.t)}</span></div>`).join('')
     :'<div class="calmo">Tudo em ordem<br><span>nenhum agente rodando ou com falha</span></div>';
   const e=STATE.equipe, v=STATE.vault; let r='';
   if(e)r+=`<div><label>Equipe · chamados</label><b>${f(e.abertos_total)}</b> em aberto · <b class="${e.sem_responsavel>0?'a':''}">${f(e.sem_responsavel)}</b> sem responsável</div>`;
