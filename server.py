@@ -12,7 +12,7 @@ Expõe só metadados (agente, hora, modelo, código de saída). O conteúdo das 
 
 Uso: python3 server.py [porta]      (escuta apenas em 127.0.0.1; padrão 8765)
 """
-import os, re, sys, json, time, sqlite3, subprocess
+import os, re, sys, json, time, sqlite3, subprocess, threading
 from datetime import datetime, timedelta
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
@@ -27,6 +27,9 @@ STATE_DB = os.path.join(HERMES, "state.db")
 # Sem Hermes neste computador (ex.: um colega que só quer ver o painel), usa os dados de exemplo da pasta exemplo/:
 # o painel abre com os agentes e jobs do setor, sem histórico de execuções (use ?demo=1 para simular estados).
 EXEMPLO = os.path.join(AQUI, "exemplo")
+# Só para o teste de cenários (testar_sala.py): catálogo, jobs e equipe fictícios, sem tocar nos arquivos reais
+AGENTES = os.environ.get("SALA_AGENTES") or AGENTES
+JOBS = os.environ.get("SALA_JOBS") or JOBS
 if not os.path.exists(AGENTES):
     AGENTES = os.path.join(EXEMPLO, "agentes.json")
 if not os.path.exists(JOBS):
@@ -43,10 +46,19 @@ GAP = 0.8           # espaço entre salas na mesma linha
 CORREDOR = 1.6      # corredor entre a linha de cima e a de baixo
 
 
+SAUDE = []          # problemas de leitura das fontes na montagem atual do /api/state (vai para a faixa âmbar da página)
+
+
+def problema(fonte, msg):
+    if not any(x["fonte"] == fonte for x in SAUDE):
+        SAUDE.append({"fonte": fonte, "msg": msg})
+
+
 def carregar_layout():
     try:
         return json.load(open(LAYOUT_JSON, encoding="utf8"))
     except Exception:
+        problema("layout.json", "layout.json ilegível: salas no padrão")
         return {"setores": [], "padrao": {"id": "novos", "titulo": "NOVOS AGENTES", "linha": "baixo"}, "fluxos": []}
 
 
@@ -170,7 +182,12 @@ def historico():
     if os.path.isdir(LOGS):
         for n in os.listdir(LOGS):
             if n.endswith(".log"):
-                for e in eventos_log(os.path.join(LOGS, n)):
+                try:
+                    evs = eventos_log(os.path.join(LOGS, n))
+                except Exception:
+                    problema("log " + n, "log de agente ilegível: " + n)
+                    continue
+                for e in evs:
                     k = (e["ts"], e["agent"], e["model"], e["code"])
                     if k not in vistos:
                         vistos.add(k)
@@ -227,8 +244,9 @@ def cron_dados():
         j = json.load(open(JOBS, encoding="utf8"))
         jobs = j["jobs"] if isinstance(j, dict) and "jobs" in j else j
     except Exception:
+        problema("jobs.json", "jobs.json do cron ilegível: os jobs agendados não aparecem")
         return []
-    jobs = [x for x in jobs if x.get("name") not in JOBS_OCULTOS]
+    jobs = [x for x in jobs if x.get("name") not in JOBS_OCULTOS and not (x.get("name") or "").startswith("avulso-")]   # "avulso-*" = demandas pontuais fora do monitoramento
     execs = {}
     try:
         # o executions.db está em modo WAL: com mode=ro o SQLite recusa ("unable to open database file"); mode=rw + query_only lê sem poder escrever
@@ -239,8 +257,10 @@ def cron_dados():
                              "order by claimed_at desc limit 400"):
             execs.setdefault(r["job_id"], []).append(dict(r))
         con.close()
-    except Exception:
-        pass
+    except Exception as e:
+        # sem o banco, os jobs aparecem sem execuções (nunca "rodando" e fora do feed): avisar na página em vez de engolir o erro
+        if os.path.exists(EXEC_DB):      # sem Hermes (colega com os dados de exemplo) o banco não existe: não é problema
+            problema("executions.db", "executions.db do cron ilegível (%s): sem execuções dos jobs" % e)
     saida = []
     hoje = datetime.now().strftime("%Y-%m-%d")
     for jb in jobs:
@@ -259,6 +279,8 @@ def cron_dados():
             "checks_today": sum(1 for e in ex if (e.get("started_at") or "").startswith(hoje)),
             "failed_today": sum(1 for e in ex if (e.get("started_at") or "").startswith(hoje) and e["status"] == "failed"),
             "last_exec_status": ultimo["status"] if ultimo else None,
+            "work_today": sum(1 for e in ex if (e.get("started_at") or "").startswith(hoje) and (e["status"] == "failed" or dur(e) > 5)),
+            "chama_agente": chama_agente(jb.get("script")),
             "_execs": ex,
         })
     return saida
@@ -297,9 +319,41 @@ def jarvis_estado():
             base["status"], base["source"], base["model"] = "running", melhor[1], melhor[2]
         if base["last_activity"]:
             base["last_activity"] = datetime.fromtimestamp(base["last_activity"]).strftime("%Y-%m-%d %H:%M:%S")
-    except Exception:
-        pass
+    except Exception as e:
+        # falha de leitura do state.db: o Jarvis aparece "disponível", sem derrubar o /api/state
+        if os.path.exists(STATE_DB):
+            problema("state.db", "state.db ilegível: Jarvis sem estado e sem \"sem ação\" dos agentes")
     return base
+
+
+def chama_agente(script):
+    """True se o script do job roda um agente (rodar_agente.py): essa execução já conta como execução do agente."""
+    if not script:
+        return False
+    try:
+        return "rodar_agente" in open(os.path.join(HERMES, "scripts", os.path.basename(script)), encoding="utf8", errors="ignore").read()
+    except Exception:
+        return False
+
+
+SEM_ACAO_S = 300     # agente rodando sem nenhuma mensagem nova há 5 min: "SEM AÇÃO" na planta (ferramenta demorando ou travado)
+
+
+def sem_acao(modelo, inicio):
+    """Segundos desde a última mensagem da sessão 'oneshot' do modelo aberta depois de `inicio` (vínculo aproximado, igual ao popup).
+    Só lê hora de mensagens do state.db, nunca o conteúdo. None se não achar a sessão."""
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % STATE_DB, uri=True, timeout=3)
+        for sid, in con.execute("select id from sessions where source='oneshot' and model=? and started_at>=? order by started_at", (modelo, inicio - 5)).fetchall():
+            n, ult = con.execute("select count(*), max(timestamp) from messages where session_id=?", (sid,)).fetchone()
+            if n > 2 and ult:
+                con.close()
+                return int(time.time() - ult)
+        con.close()
+    except Exception:
+        if os.path.exists(STATE_DB):
+            problema("state.db", "state.db ilegível: sem o tempo \"sem ação\" dos agentes")
+    return None
 
 
 def dur(e):
@@ -329,7 +383,7 @@ def claude_uso():
     return out if ("five_hour" in out or "seven_day" in out) else None
 
 VAULT_CONT = os.path.join(HERMES, "data", "vault_contagem.json")   # gravado por vault_contagem.py (LaunchAgent ai.hermes.vault-contagem)
-EQUIPE_JSON = os.path.join(HERMES, "data", "equipe_agidesk.json")   # gravado por equipe_agidesk.py (job de cron oculto govti-equipe-agidesk, a cada 5 min)
+EQUIPE_JSON = os.environ.get("SALA_EQUIPE") or os.path.join(HERMES, "data", "equipe_agidesk.json")   # gravado por equipe_agidesk.py (job de cron oculto govti-equipe-agidesk, a cada 5 min)
 EQUIPE_VELHO_S = 900
 
 
@@ -343,6 +397,8 @@ def equipe_painel():
         return [], None
     age = int(time.time() - (j.get("updated_at") or 0))
     velho = age > EQUIPE_VELHO_S
+    if velho:
+        problema("equipe", "números da equipe do Agidesk defasados (lidos há %d min; job govti-equipe-agidesk)" % (age // 60))
     hoje_ok = j.get("dia") == datetime.now().strftime("%Y-%m-%d")
     pessoas = []
     for m in membros:
@@ -362,6 +418,8 @@ def vault_painel():
     except Exception:
         return None
     agora = time.time(); hoje = datetime.now().strftime("%Y-%m-%d"); total = j.get("total")
+    if agora - (j.get("updated_at") or agora) > 1800:
+        problema("vault", "contagem do vault defasada (há %d min; job govti-vault-contagem)" % ((agora - j.get("updated_at")) // 60))
     hist = j.get("historico") or {}
     antes = sorted(d for d in hist if d < hoje)
     out = {"total": total, "age_s": int(agora - (j.get("updated_at") or agora)),
@@ -378,6 +436,20 @@ def vault_painel():
     if isinstance(a, dict) and a.get("divergencias") is not None:
         out["auditoria"] = {"divergencias": a["divergencias"], "age_s": int(agora - (a.get("checado_em") or agora)), "categorias": a.get("categorias") or {}}
     return out
+
+_LOCK, _CACHE = threading.Lock(), [0.0, b""]
+
+
+def estado_json():
+    """/api/state com cache de 0,8 s: várias abas abertas não multiplicam ps + SQLite a cada segundo."""
+    with _LOCK:
+        if time.time() - _CACHE[0] < 0.8:
+            return _CACHE[1]
+        del SAUDE[:]
+        corpo = json.dumps(estado(), ensure_ascii=False).encode("utf8")
+        _CACHE[0], _CACHE[1] = time.time(), corpo
+        return corpo
+
 
 def estado():
     agora = datetime.now()
@@ -405,6 +477,8 @@ def estado():
             "model": a.get("modelo"), "provider": a.get("provedor"), "skills": a.get("skills", []),
             "max_turns": a.get("max_turns"),
             "status": st, "elapsed_s": rod.get(nome),
+            "timeout_s": int(a.get("timeout_s", 1800)),
+            "sem_acao_s": sem_acao(a.get("modelo"), time.time() - rod[nome]) if nome in rod else None,
             "last": ult,
             "runs_today": sum(1 for e in h if e["ts"].startswith(hoje)),
             "errors_today": sum(1 for e in h if e["ts"].startswith(hoje) and e["code"] != 0),
@@ -412,12 +486,13 @@ def estado():
             "recent": h[-8:][::-1],
         })
     crons = cron_dados()
-    concluidos = [dict(e, type="agent") for e in hist[-60:]]
+    concluidos = [dict(e, type="agent", name=e["agent"], status="ok" if e["code"] == 0 else "error") for e in hist[-60:]]
     em_execucao = []        # o que está rodando AGORA aparece sempre, além dos 40 concluídos
     for a in agentes:
         if a["status"] == "running":
             ini = agora - timedelta(seconds=a["elapsed_s"] or 0)
             em_execucao.append({"ts": ini.strftime("%Y-%m-%d %H:%M:%S"), "agent": a["id"], "type": "agent",
+                                 "name": a["id"], "status": "running",
                                 "model": a["model"], "code": 0, "fallback": False, "running": True})
     for c in crons:
         ex = c.pop("_execs")
@@ -426,7 +501,8 @@ def estado():
             vivo = next((e for e in ex if e.get("status") in ("running", "claimed") and pid_vivo(e.get("pid"))), None)
             if vivo:
                 em_execucao.append({"ts": (vivo.get("started_at") or "")[:19].replace("T", " "), "agent": c["id"],
-                                    "type": "cron", "model": None, "code": 0, "fallback": False, "running": True})
+                                    "type": "cron", "name": c["id"], "status": "running",
+                                    "model": None, "code": 0, "fallback": False, "running": True})
         elif c["last_exec_status"] == "failed" or (c["last_status"] not in (None, "ok")):
             c["status"] = "error"
         elif c["enabled"] is False:
@@ -438,6 +514,7 @@ def estado():
             if e["status"] == "failed" or dur(e) > 5:
                 concluidos.append({"ts": (e["started_at"] or "")[:19].replace("T", " "), "agent": c["id"], "type": "cron",
                                    "model": None, "code": 1 if e["status"] == "failed" else 0, "fallback": False,
+                                    "name": c["id"], "status": "error" if e["status"] == "failed" else "ok",
                                    "dur": round(dur(e))})
     for a in agentes:    # agente que TAMBÉM roda como job de cron SEM agente (campo "cron_job" no agentes.json): o boneco mostra a última execução do job se for mais nova
         job = cat.get(a["id"], {}).get("cron_job")
@@ -462,7 +539,9 @@ def estado():
     todos = agentes + crons
     kp = {
         "running": sum(1 for x in todos if x["status"] == "running"),
-        "runs_today": sum(x.get("runs_today", 0) for x in agentes),
+        # agentes + jobs de cron SEM agente que trabalharam hoje (mesmo critério do feed); job que chama rodar_agente.py ou ligado por "cron_job" já conta pelo agente
+        "runs_today": sum(x.get("runs_today", 0) for x in agentes) + sum(c["work_today"] for c in crons
+                      if not c["chama_agente"] and not any(v.get("cron_job") == c["name"] for v in cat.values())),
         "errors_today": sum(x.get("errors_today", 0) for x in agentes) + sum(c["failed_today"] for c in crons),
         "in_error": sum(1 for x in todos if x["status"] == "error"),
         "agents": len(agentes), "crons": len(crons),
@@ -471,12 +550,13 @@ def estado():
     pessoas, equipe = equipe_painel()
     layout, origem = montar_layout(cat, [c["id"] for c in crons], [p["id"] for p in pessoas])
     jarvis = jarvis_estado()
-    for x in todos + [jarvis]:
+    for x in todos + [jarvis] + pessoas:
         z, motivo = origem.get(x["id"], ("", ""))
         x["setor"], x["setor_motivo"] = z, motivo
     sem_setor = [i for i, (z, m) in origem.items() if m.startswith("padrão")]
     return {"now": agora.strftime("%Y-%m-%d %H:%M:%S"), "agents": agentes, "crons": crons,
-            "feed": feed, "kpis": kp, "layout": layout, "sem_setor": sem_setor, "jarvis": jarvis, "claude_usage": claude_uso(), "vault": vault_painel(), "pessoas": pessoas, "equipe": equipe}
+            "feed": feed, "kpis": kp, "layout": layout, "sem_setor": sem_setor, "jarvis": jarvis, "claude_usage": claude_uso(), "vault": vault_painel(), "pessoas": pessoas, "equipe": equipe,
+            "saude": list(SAUDE), "versao": 2}
 
 
 def atividade(agente):
@@ -532,18 +612,36 @@ class H(BaseHTTPRequestHandler):
         pass
 
     def _send(self, code, body, ctype):
-        self.send_response(code)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass                      # navegador fechou a aba no meio da resposta: nada a fazer
+
+    def host_ok(self):
+        # Só atende quem chama pelo próprio computador. Bloqueia "DNS rebinding": um site de fora que aponta o próprio nome
+        # para 127.0.0.1 e tenta ler a API pelo navegador de quem está com a Sala aberta.
+        h = (self.headers.get("Host") or "").lower()
+        porta = self.server.server_address[1]
+        return h in ("127.0.0.1:%d" % porta, "localhost:%d" % porta, "127.0.0.1", "localhost", "[::1]:%d" % porta)
+
+    def do_HEAD(self):
+        self.do_GET()
 
     def do_GET(self):
         p = self.path.split("?")[0]
+        if not self.host_ok():
+            self._send(403, b"acesso so por 127.0.0.1 ou localhost", "text/plain; charset=utf-8")
+            return
         try:
             if p == "/api/state":
-                self._send(200, json.dumps(estado(), ensure_ascii=False).encode("utf8"), "application/json; charset=utf-8")
+                self._send(200, estado_json(), "application/json; charset=utf-8")
             elif p == "/api/atividade":
                 from urllib.parse import urlparse, parse_qs
                 ag = (parse_qs(urlparse(self.path).query).get("agent") or [""])[0]

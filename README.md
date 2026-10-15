@@ -9,6 +9,7 @@ Painel local, em visão isométrica, que mostra o estado de agentes de I.A. do [
 - **Somente leitura e local:** o servidor escuta só em `127.0.0.1` (porta 8765 por padrão) e não grava nada além dos próprios arquivos de números em `~/.hermes/data/`.
 - **Sem modelo de I.A. e sem gastar tokens:** o painel só lê arquivos de histórico, o banco de estado do Hermes e a API do Agidesk.
 - **Privacidade:** o navegador recebe só nome do agente, hora, modelo e código de saída. O conteúdo das respostas nunca é enviado.
+- **Só atende o próprio computador:** pedidos com outro nome de host recebem 403 (proteção contra *DNS rebinding*).
 - **Só biblioteca padrão do Python 3.** Testado no macOS.
 
 ## Rodar
@@ -19,6 +20,15 @@ python3 server.py 8800       # outra porta
 ```
 
 Sem o Hermes instalado, o painel abre com os dados fictícios de `exemplo/` (`agentes.json`, `cron_jobs.json`). Acrescente `?demo=1` à URL para ver os estados de exemplo (rodando, erro, ocioso).
+
+## Testar
+
+```
+python3 testar_sala.py            # ~5 min: dados atuais, demonstração e cenários fictícios (agente novo, cron com falha, 4 e 6 pessoas)
+python3 testar_sala.py --rapido   # ~2 min
+```
+
+Precisa do Google Chrome (`CHROME=<caminho>` para outro local). Os cenários usam arquivos temporários; nada real é alterado. Os contadores do diagnóstico (`?debug=1`) devem ficar todos em 0.
 
 ## Configuração local (fora do repositório)
 
@@ -44,6 +54,7 @@ Sem o arquivo, os scripts recusam rodar e dizem o que falta; nada é inventado.
 | `vault_contagem.py` | job de cron: contagem de notas do vault para a placa da DIRETORIA |
 | `claude_uso_poll.py` | opcional: percentual de uso do plano do Claude Code, lido com o token que o próprio Claude Code guarda |
 | `sala_config.py` | leitura da configuração local |
+| `testar_sala.py` | teste automático: abre a página no Chrome headless com `?debug=1` em vários cenários e falha se houver sobreposição, objeto atravessado, erro de JavaScript ou API incoerente |
 | `exemplo/` | dados fictícios para rodar sem o Hermes |
 
 Os jobs de cron são agendados no Hermes como jobs sem agente (`--no-agent`), apontando para os scripts acima.
