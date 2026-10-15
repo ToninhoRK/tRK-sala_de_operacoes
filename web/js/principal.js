@@ -5,6 +5,7 @@ async function poll(){
   SOM.ult=Date.now();
   try{const r=await fetch('/api/state',{cache:'no-store'});const s=await r.json();if(DEMO)demo(s);
     const sig=JSON.stringify(s.layout.zones.map(z=>[z.id,z.items,z.w,z.h]));
+    TITULOS=titulosDe(s);
     if(!built||sig!==SIG){const first=!built;SIG=sig;build(s);STATE=s;update(s);const ff=first?+(QS.get('ff')||0):0;for(let t=0;t<ff;t+=.1)sim(.1)
       const tr=QS.get('testrun');
       if(first&&tr&&WORKERS[tr]){const w=WORKERS[tr];STATIONS[tr].it.status=QS.get('as')||'running';const want=STATIONS[tr].stops[QS.get('as')==='error'?'side':'home'];

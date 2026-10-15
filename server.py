@@ -49,6 +49,12 @@ CORREDOR = 1.6      # corredor entre a linha de cima e a de baixo
 SAUDE = []          # problemas de leitura das fontes na montagem atual do /api/state (vai para a faixa âmbar da página)
 
 
+def ler_json(caminho):
+    """json.load que fecha o arquivo (o open() solto deixava o arquivo aberto até o coletor de lixo)."""
+    with open(caminho, encoding="utf8") as f:
+        return json.load(f)
+
+
 def problema(fonte, msg):
     if not any(x["fonte"] == fonte for x in SAUDE):
         SAUDE.append({"fonte": fonte, "msg": msg})
@@ -56,7 +62,7 @@ def problema(fonte, msg):
 
 def carregar_layout():
     try:
-        return json.load(open(LAYOUT_JSON, encoding="utf8"))
+        return ler_json(LAYOUT_JSON)
     except Exception:
         problema("layout.json", "layout.json ilegível: salas no padrão")
         return {"setores": [], "padrao": {"id": "novos", "titulo": "NOVOS AGENTES", "linha": "baixo"}, "fluxos": []}
@@ -236,12 +242,162 @@ def pid_vivo(pid):
         return False
 
 
+EVENTOS_MAX_BYTES = 2_000_000   # lê só o fim do eventos.jsonl (cada execução = 2 linhas de ~200 bytes)
+
+
+def execucoes():
+    """Execuções gravadas pelo rodar_agente.py em eventos.jsonl (início e fim; desde a Fase 5, 15/10/2026).
+    Devolve {pid_t: {agente, ini, fim, codigo, duracao_s, modelo, sessoes, vivo}}. Arquivo ausente = lista vazia (executor antigo)."""
+    caminho = os.path.join(LOGS, "eventos.jsonl")
+    out = {}
+    try:
+        with open(caminho, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - EVENTOS_MAX_BYTES))
+            linhas = f.read().decode("utf8", "ignore").splitlines()
+    except FileNotFoundError:
+        return out
+    except Exception:
+        problema("eventos.jsonl", "eventos.jsonl do executor ilegível: rodando/custo pelo método aproximado")
+        return out
+    abertos = {}
+    for l in linhas:
+        try:
+            d = json.loads(l)
+            pid, t, ag = d["pid"], float(d["t"]), d["agente"]
+        except Exception:
+            continue
+        if d.get("ev") == "inicio":
+            k = "%s_%d" % (pid, t)
+            out[k] = {"agente": ag, "ini": t, "fim": None, "codigo": None, "duracao_s": None, "modelo": d.get("modelo"), "sessoes": [], "pid": pid}
+            abertos[pid] = k
+        elif d.get("ev") == "fim" and pid in abertos:
+            x = out[abertos.pop(pid)]
+            x.update(fim=t, codigo=d.get("codigo"), duracao_s=d.get("duracao_s"), sessoes=d.get("sessoes") or [], modelo=d.get("modelo") or x["modelo"])
+    for x in out.values():
+        x["vivo"] = x["fim"] is None and pid_vivo(x["pid"])
+    return out
+
+
+def uteis_s(a, b):
+    """Segundos entre os instantes a e b sem contar sábados e domingos (hora local)."""
+    if b <= a:
+        return 0
+    tot, t = 0.0, a
+    while t < b:
+        d = datetime.fromtimestamp(t)
+        prox = (d.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).timestamp()
+        if d.weekday() < 5:
+            tot += min(prox, b) - t
+        t = prox
+    return tot
+
+
+def ts_local(t):
+    return datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M:%S")
+
+
+_CUSTO = [0.0, {}]
+
+
+def custos(hist, exs, dias=7):
+    """Custo (US$ estimado pelo Hermes), tokens e duração por agente nos últimos `dias`, da tabela sessions do state.db (só números).
+    Exato quando a execução tem evento com o id das sessões; para execuções sem evento (executor antigo) o vínculo é aproximado:
+    sessão 'oneshot' do mesmo modelo que terminou até 5 s antes do registro no log e começou no máximo 35 min antes."""
+    corte = time.time() - dias * 86400
+    r = {}
+    if not os.path.exists(STATE_DB):
+        return r
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % STATE_DB, uri=True, timeout=3)
+        sess = {row[0]: row[1:] for row in con.execute(
+            "select id, model, started_at, ended_at, coalesce(estimated_cost_usd,0), coalesce(input_tokens,0)+coalesce(output_tokens,0) "
+            "from sessions where source='oneshot' and started_at>=?", (corte - 3600,))}
+        con.close()
+    except Exception:
+        problema("state.db", "state.db ilegível: sem custo por agente")
+        return r
+    usadas = set()
+
+    def soma(ag, ids, aprox):
+        x = r.setdefault(ag, {"custo_usd": 0.0, "tokens": 0, "execucoes": 0, "aprox": False})
+        for i in ids:
+            if i in sess:
+                usadas.add(i)
+                x["custo_usd"] += sess[i][3]
+                x["tokens"] += sess[i][4]
+        x["execucoes"] += 1
+        x["aprox"] = x["aprox"] or aprox
+    com_evento = []
+    for x in exs.values():
+        if x["fim"] and x["fim"] >= corte:
+            soma(x["agente"], x["sessoes"], False)
+            com_evento.append((x["agente"], x["fim"]))
+    for e in hist:      # cronológico: cada execução fica com as sessões dela antes que a seguinte do mesmo modelo as alcance
+        t = time.mktime(time.strptime(e["ts"], "%Y-%m-%d %H:%M:%S"))
+        if t < corte or any(a == e["agent"] and abs(f - t) <= 10 for a, f in com_evento):
+            continue
+        ids = [k for k, v in sess.items() if k not in usadas and v[0] == e["model"] and v[2] and v[2] <= t + 5 and v[1] >= t - 2100]
+        soma(e["agent"], ids, True)
+    for x in r.values():
+        x["custo_usd"] = round(x["custo_usd"], 4)
+    return r
+
+
+def tendencia(hist, crons_execs, dias=7):
+    """Execuções e falhas por dia nos últimos `dias` (hoje por último): agentes (log) + jobs de cron sem agente que trabalharam."""
+    hoje = datetime.now().date()
+    ds = [(hoje - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(dias - 1, -1, -1)]
+    tot = {d: [0, 0] for d in ds}
+    por = {}
+    for e in hist:
+        d = e["ts"][:10]
+        if d in tot:
+            tot[d][0] += 1; tot[d][1] += e["code"] != 0
+            p = por.setdefault(e["agent"], {x: [0, 0] for x in ds}); p[d][0] += 1; p[d][1] += e["code"] != 0
+    for cid, ex in crons_execs:
+        for e in ex:
+            d = (e.get("started_at") or "")[:10]
+            if d in tot and (e["status"] == "failed" or dur(e) > 5):
+                f = e["status"] == "failed"
+                tot[d][0] += 1; tot[d][1] += f
+                p = por.setdefault(cid, {x: [0, 0] for x in ds}); p[d][0] += 1; p[d][1] += f
+    return ([{"dia": d, "execucoes": tot[d][0], "falhas": tot[d][1]} for d in ds],
+            {k: [v[d] for d in ds] for k, v in por.items()})
+
+
+ATRASO_TOLERANCIA_S = 600   # job com a próxima rodada vencida há mais de 10 min (e sem estar rodando) = ATRASADO: o agendador não disparou (Mac dormindo, gateway parado)
+ANTIGO_S = 7 * 86400        # agente sem rodar há mais de 7 dias: selo apagado (não é falha; agentes sob demanda passam dias parados)
+
+
+def iso_epoch(s):
+    """'2026-10-15T15:20:00-03:00' (ou sem fuso, hora local) -> epoch; None se vazio ou ilegível."""
+    if not s:
+        return None
+    try:
+        d = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        return d.timestamp()
+    except Exception:
+        return None
+
+
+def atraso_job(jb, rodando, agora=None):
+    """Segundos de atraso de um job ativo cuja próxima rodada já passou da tolerância; None se em dia, pausado ou rodando."""
+    if rodando or jb.get("enabled") is False or jb.get("paused_at") or jb.get("state") == "paused":
+        return None
+    prox = iso_epoch(jb.get("next_run_at"))
+    agora = time.time() if agora is None else agora
+    if prox is None or agora - prox <= ATRASO_TOLERANCIA_S:
+        return None
+    return int(agora - prox)
+
+
 JOBS_OCULTOS = {"govti-vault-contagem", "govti-equipe-agidesk"}   # jobs de apoio da própria Sala (contagem da placa da Diretoria; números da sala GOVERNANÇA): rodam a cada 5 min e não aparecem nem no feed
 
 def cron_dados():
     jobs = []
     try:
-        j = json.load(open(JOBS, encoding="utf8"))
+        j = ler_json(JOBS)
         jobs = j["jobs"] if isinstance(j, dict) and "jobs" in j else j
     except Exception:
         problema("jobs.json", "jobs.json do cron ilegível: os jobs agendados não aparecem")
@@ -273,6 +429,8 @@ def cron_dados():
             "desc": "Job agendado: %s" % (sch.get("display") or sch.get("expr") or ""),
             "schedule": sch.get("display") or sch.get("expr"),
             "enabled": jb.get("enabled", True),
+            "paused": bool(jb.get("paused_at") or jb.get("state") == "paused"),
+            "atrasado_s": atraso_job(jb, bool(rodando)),
             "next_run": jb.get("next_run_at"), "last_run": jb.get("last_run_at"),
             "last_status": jb.get("last_status"),
             "running": bool(rodando),
@@ -370,7 +528,7 @@ def claude_uso():
     """Uso da assinatura Claude (sessao 5 h e semana 7 d), so percentual e hora de reinicio. Somente leitura.
     So atualiza quando uma sessao do Claude Code responde: por isso vai junto a hora da leitura e se a janela ja reiniciou."""
     try:
-        j = json.load(open(CLAUDE_USO, encoding="utf8"))
+        j = ler_json(CLAUDE_USO)
     except Exception:
         return None
     agora = time.time()
@@ -392,7 +550,7 @@ def equipe_painel():
     NADA POR PESSOA chega ao navegador (decisão de 15/10/2026): nem nome nem número individual, mesmo se o arquivo for do formato antigo.
     Devolve ([estação], resumo) ou ([], None) sem dados. Leitura com mais de 15 min fica 'idle' (cinza); encerrados de outro dia aparecem como None."""
     try:
-        j = json.load(open(EQUIPE_JSON, encoding="utf8"))
+        j = ler_json(EQUIPE_JSON)
         if j.get("abertos_total") is None:
             raise ValueError("sem total")
     except Exception:
@@ -407,9 +565,12 @@ def equipe_painel():
         enc = sum(v for v in j["encerrados_hoje"].values() if isinstance(v, int))
     estacao = {"id": "equipe:agidesk", "kind": "equipe", "name": "Equipe", "status": "idle" if velho else "ok",
                "abertos": j.get("abertos_total"), "sem_responsavel": j.get("sem_responsavel"),
-               "encerrados": enc if hoje_ok else None,
+               "encerrados": enc if hoje_ok else None, "vencidos": j.get("vencidos"), "encerrados_7d": j.get("encerrados_7d"),
+               "atendimento_medio_h": j.get("atendimento_medio_h_7d"), "atendimento_mediano_h": j.get("atendimento_mediano_h_7d"),
                "desc": "Totais da equipe Governança de TI no Agidesk, lidos a cada 5 min. Sem números por pessoa."}
-    resumo = {"sem_responsavel": j.get("sem_responsavel"), "abertos_total": j.get("abertos_total"), "age_s": age, "velho": velho}
+    resumo = {"sem_responsavel": j.get("sem_responsavel"), "abertos_total": j.get("abertos_total"), "vencidos": j.get("vencidos"),
+              "encerrados_7d": j.get("encerrados_7d"), "atendimento_medio_h": j.get("atendimento_medio_h_7d"),
+              "atendimento_mediano_h": j.get("atendimento_mediano_h_7d"), "age_s": age, "velho": velho}
     # + 2 mesas ilustrativas (sem nome nem número; o clique abre a estação da equipe): a sala tem a profundidade da linha e, com uma mesa só, ficava vazia
     ilustr = [{"id": "equipe:mesa%d" % i, "kind": "equipe", "decor": True, "name": "", "status": estacao["status"],
                "desc": "Mesa ilustrativa da equipe (sem dados)."} for i in (2, 3)]
@@ -418,7 +579,7 @@ def equipe_painel():
 def vault_painel():
     """Placa da DIRETORIA: total de notas do vault, variação (hoje e semana) e resultado da última conferência da auditoria. So numeros; somente leitura."""
     try:
-        j = json.load(open(VAULT_CONT, encoding="utf8"))
+        j = ler_json(VAULT_CONT)
     except Exception:
         return None
     agora = time.time(); hoje = datetime.now().strftime("%Y-%m-%d"); total = j.get("total")
@@ -458,9 +619,29 @@ def estado_json():
 def estado():
     agora = datetime.now()
     hoje = agora.strftime("%Y-%m-%d")
-    cat = json.load(open(AGENTES, encoding="utf8"))
+    cat = ler_json(AGENTES)
     hist = historico()
     rod = rodando_agora()
+    exs = execucoes()
+    agora_s = time.time()
+    idx = {}
+    for e in hist:
+        idx.setdefault(e["agent"], []).append((time.mktime(time.strptime(e["ts"], "%Y-%m-%d %H:%M:%S")), e))
+    for x in exs.values():
+        if x["vivo"]:                                  # evento de início sem fim e processo vivo: rodando (exato, não depende do ps)
+            rod[x["agente"]] = max(rod.get(x["agente"], 0), int(agora_s - x["ini"]))
+            continue
+        fim = x["fim"] or x["ini"]
+        if agora_s - fim > 30 * 86400:
+            continue
+        par = next((e for t, e in reversed(idx.get(x["agente"], [])) if abs(t - fim) <= 10), None)
+        if par:
+            par["dur"] = round(x["duracao_s"]) if x["duracao_s"] is not None else None
+        elif x["agente"] in cat and (x["codigo"] or x["fim"] is None):
+            # execução que terminou sem registro no log (morta por sinal, Mac desligado, executor quebrou): antes sumia; agora é falha
+            hist.append({"ts": ts_local(fim), "agent": x["agente"], "model": x["modelo"] or "?", "code": x["codigo"] if x["codigo"] else -1,
+                         "fallback": False, "interrompida": True, "dur": round(x["duracao_s"]) if x["duracao_s"] is not None else None})
+    hist.sort(key=lambda e: e["ts"])
     por = {}
     for e in hist:
         por.setdefault(e["agent"], []).append(e)
@@ -488,6 +669,8 @@ def estado():
             "errors_today": sum(1 for e in h if e["ts"].startswith(hoje) and e["code"] != 0),
             "runs_total": len(h),
             "recent": h[-8:][::-1],
+            "cadencia_h": a.get("cadencia_h"),
+            "dias_uteis": bool(a.get("cadencia_dias_uteis")),
         })
     crons = cron_dados()
     concluidos = [dict(e, type="agent", name=e["agent"], status="ok" if e["code"] == 0 else "error") for e in hist[-60:]]
@@ -498,8 +681,10 @@ def estado():
             em_execucao.append({"ts": ini.strftime("%Y-%m-%d %H:%M:%S"), "agent": a["id"], "type": "agent",
                                  "name": a["id"], "status": "running",
                                 "model": a["model"], "code": 0, "fallback": False, "running": True})
+    execs_cron = []
     for c in crons:
         ex = c.pop("_execs")
+        execs_cron.append((c["id"], ex))
         if c["running"]:
             c["status"] = "running"
             vivo = next((e for e in ex if e.get("status") in ("running", "claimed") and pid_vivo(e.get("pid"))), None)
@@ -509,7 +694,7 @@ def estado():
                                     "model": None, "code": 0, "fallback": False, "running": True})
         elif c["last_exec_status"] == "failed" or (c["last_status"] not in (None, "ok")):
             c["status"] = "error"
-        elif c["enabled"] is False:
+        elif c["enabled"] is False or c["paused"]:
             c["status"] = "idle"
         else:
             c["status"] = "ok"
@@ -537,6 +722,27 @@ def estado():
         a["runs_total"] += 1
         if a["status"] != "running":
             a["status"] = "error" if code else "ok"
+    for a in agentes:    # cadência opcional no agentes.json ("cadencia_h": 24 = deve rodar ao menos 1x por dia): passou de 1,2x sem rodar = ATRASADO
+        ult_s = time.mktime(time.strptime(a["last"]["ts"], "%Y-%m-%d %H:%M:%S")) if a["last"] else None
+        a["atrasado_s"] = None
+        try:
+            cad = float(a["cadencia_h"]) * 3600 if a["cadencia_h"] else None
+        except (TypeError, ValueError):
+            cad = None
+        decorrido = (uteis_s(ult_s, agora_s) if a["dias_uteis"] else agora_s - ult_s) if ult_s else None   # dias úteis: sábado e domingo não contam
+        if cad and a["status"] != "running" and (ult_s is None or decorrido > cad * 1.2):
+            a["atrasado_s"] = int(decorrido - cad) if ult_s else int(cad)
+        a["antigo"] = bool(a["status"] == "ok" and ult_s and agora_s - ult_s > ANTIGO_S and not a["atrasado_s"])
+    tend, tend_por = tendencia(hist, execs_cron)
+    if agora_s - _CUSTO[0] > 60:              # custo muda devagar: recalcula no máximo 1x por minuto
+        _CUSTO[0], _CUSTO[1] = agora_s, custos(hist, exs)
+    cst = _CUSTO[1]
+    nomes = (carregar_layout() or {}).get("nomes") or {}
+    for x in agentes + crons:
+        x["tendencia"] = tend_por.get(x["id"], [[0, 0]] * 7)
+        x["titulo"] = nomes.get(x["id"]) or nomes.get(x.get("name"))
+    for a in agentes:
+        a["custo_7d"] = cst.get(a["id"])
     concluidos.sort(key=lambda e: e["ts"], reverse=True)
     em_execucao.sort(key=lambda e: e["ts"], reverse=True)
     feed = em_execucao + concluidos[:40]      # sempre: todos os em execução + os 40 concluídos mais recentes
@@ -548,8 +754,13 @@ def estado():
                       if not c["chama_agente"] and not any(v.get("cron_job") == c["name"] for v in cat.values())),
         "errors_today": sum(x.get("errors_today", 0) for x in agentes) + sum(c["failed_today"] for c in crons),
         "in_error": sum(1 for x in todos if x["status"] == "error"),
+        "late": sum(1 for x in todos if x.get("atrasado_s") and x["status"] != "error"),
+        "stuck": sum(1 for x in agentes if x["status"] == "running" and (x.get("sem_acao_s") or 0) >= SEM_ACAO_S),
         "agents": len(agentes), "crons": len(crons),
         "last_activity": feed[0]["ts"] if feed else None,
+        "tendencia": tend,
+        "custo_7d_usd": round(sum(x["custo_usd"] for x in cst.values()), 2) if cst else None,
+        "eventos_executor": bool(exs),
     }
     est_equipe, equipe = equipe_painel()
     layout, origem = montar_layout(cat, [c["id"] for c in crons], [p["id"] for p in est_equipe])
@@ -566,7 +777,7 @@ def estado():
 def atividade(agente):
     """Últimas ferramentas chamadas pelo agente (só NOME da ferramenta e hora; nunca argumentos, comandos nem respostas).
     O state.db não registra qual agente abriu a sessão: o vínculo é aproximado, por modelo + horário de início."""
-    cat = json.load(open(AGENTES, encoding="utf8"))
+    cat = ler_json(AGENTES)
     if agente not in cat:
         return {"erro": "agente desconhecido"}
     modelo = cat[agente].get("modelo")

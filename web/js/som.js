@@ -12,15 +12,15 @@
 const SOM={on:localStorage.getItem('sala_som')!=='0',ctx:null,prev:null,ult:0};
 function somFoto(s){
   const it={};
-  (s.agents||[]).forEach(a=>it[a.id]={st:a.status,err:a.errors_today||0,stuck:a.status==='running'&&a.sem_acao_s>=300});
-  (s.crons||[]).forEach(c=>it[c.id]={st:c.status,err:c.failed_today||0,stuck:false});
+  (s.agents||[]).forEach(a=>it[a.id]={st:a.status,err:a.errors_today||0,stuck:a.status==='running'&&a.sem_acao_s>=300,late:atrasado(a)});
+  (s.crons||[]).forEach(c=>it[c.id]={st:c.status,err:c.failed_today||0,stuck:false,late:atrasado(c)});
   return {it,saude:new Set((s.saude||[]).map(x=>x.fonte))};
 }
 function somEventos(a,b){              // a = foto anterior, b = atual; devolve [[tipo,id],...] com tipo falha | aviso | volta
   const ev=[];                         // bad = está em falha até voltar a OK (erro → rodando → ok também conta como "voltou")
   Object.entries(b.it).forEach(([id,c])=>{const p=a&&a.it[id]; c.bad=c.st==='error'||(!!p&&!!p.bad&&c.st!=='ok'); if(!p)return;
     if((c.st==='error'&&p.st!=='error')||c.err>p.err)ev.push(['falha',id]);
-    else if(c.stuck&&!p.stuck)ev.push(['aviso',id]);
+    else if((c.stuck&&!p.stuck)||(c.late&&!p.late))ev.push(['aviso',id]);
     else if(p.bad&&c.st==='ok')ev.push(['volta',id]);});
   if(!a)return ev;
   b.saude.forEach(f=>{if(!a.saude.has(f))ev.push(['aviso','saude:'+f])});
@@ -73,6 +73,8 @@ function somAutoteste(){
     ['passou a ficar sem ação',F({a:{st:'running',err:0,stuck:false}}),F({a:{st:'running',err:0,stuck:true}}),'aviso'],
     ['continua sem ação',F({a:{st:'running',err:0,stuck:true}}),F({a:{st:'running',err:0,stuck:true}}),''],
     ['fonte de dados com problema',F({},[]),F({},['jobs.json']),'aviso'],
+    ['rotina passou a ficar atrasada',F({a:{st:'ok',err:0,late:false}}),F({a:{st:'ok',err:0,late:true}}),'aviso'],
+    ['continua atrasada',F({a:{st:'ok',err:0,late:true}}),F({a:{st:'ok',err:0,late:true}}),''],
     ['agente novo já em erro (sem base)',F({}),F({b:{st:'error',err:1}}),''],
     ['virada do dia (contador zera)',F({a:{st:'ok',err:3}}),F({a:{st:'ok',err:0}}),''],
   ];

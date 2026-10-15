@@ -3,15 +3,17 @@
    para a TV abrir sempre do mesmo jeito. O servidor continua só leitura: nada disto sai do navegador.
    Temas: "planta" (padrão), "tv" (mesma planta, legível de longe, sem painel lateral) e "3d" (a mesma planta em 3D de
    verdade, planta3d.js). Trocar para o 3D ou sair dele recarrega a página (o 3D anota a montagem da planta). */
-const CFG_PADRAO={tema:'planta',anim:'completa',rotulos:'todos'};
+const CFG_PADRAO={tema:'planta',anim:'completa',rotulos:'todos',nomes:'amigaveis'};
 const CFG_OPCOES={
   tema:{planta:'Planta isométrica',tv:'Modo TV','3d':'3D'},
   anim:{completa:'Completa',reduzida:'Reduzida',desligada:'Desligada'},
   rotulos:{todos:'Todos',ativos:'Nomes + rodando e falha',problemas:'Só rodando e falha',nenhum:'Nenhum'},
+  nomes:{amigaveis:'Amigáveis',tecnicos:'Técnicos (id do agente)'},
 };
 const CFG_AJUDA={
   tema:'Modo TV: sem o painel lateral, números e rótulos maiores, cursor some parado. 3D: a mesma planta em 3D de verdade (luz, sombra, volume), mesmo ângulo e rótulos.',
   anim:'Reduzida: bonecos a 15 quadros/s e sem os pulsos decorativos (melhor para TV ou computador fraco). Desligada: ninguém anda; cada boneco fica parado onde o estado manda.',
+  nomes:'Amigáveis: os nomes do campo "nomes" do layout.json (ex.: Consulta AD). Técnicos: o id do agente, como no agentes.json e nos logs.',
   rotulos:'Nomes + rodando e falha: todos os nomes, mas a linha de estado só em quem está rodando ou em falha (some o "ÚLT. dd/mm"). Só rodando e falha esconde também o nome das estações OK e sem histórico (a cor do selo continua).',
 };
 const CFG=(()=>{let c={};try{c=JSON.parse(localStorage.getItem('sala_cfg')||'{}')}catch(e){}
@@ -28,6 +30,7 @@ function cfgAplicar(){
 }
 function cfgMudar(k,v){
   if(k==='tema'&&(v==='3d')!==(CFG.tema==='3d')){CFG[k]=v;cfgSalvar();const u=new URLSearchParams(location.search);u.delete('tema');location.search=u.toString();if(!u.toString())location.reload();return}   // entrar ou sair do 3D: recarrega
+  if(k==='nomes'){CFG[k]=v;cfgSalvar();location.reload();return}      // os rótulos da planta são montados uma vez: recarrega
   const animAntes=CFG.anim; CFG[k]=v; cfgSalvar(); cfgAplicar();
   if(k==='anim'&&built){ if(v==='desligada')parado(); else if(animAntes==='desligada')Object.values(WORKERS).forEach(w=>{w.timer=rr(1,4)}) }
 }
@@ -42,7 +45,7 @@ function cfgMenuMontar(){
   const m=$('cfgmenu'); if(!m)return;
   let h='';
   for(const k in CFG_OPCOES){
-    h+=`<div class="grp"><div class="tt">${{tema:'Tema',anim:'Animação',rotulos:'Rótulos das estações'}[k]}</div>`;
+    h+=`<div class="grp"><div class="tt">${{tema:'Tema',anim:'Animação',rotulos:'Rótulos das estações',nomes:'Nomes'}[k]}</div>`;
     for(const v in CFG_OPCOES[k])h+=`<label><input type="radio" name="cfg-${k}" value="${v}"> ${CFG_OPCOES[k][v]}</label>`;
     h+=`<div class="aj">${CFG_AJUDA[k]}</div></div>`;
   }

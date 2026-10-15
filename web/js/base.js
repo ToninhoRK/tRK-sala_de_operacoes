@@ -43,7 +43,13 @@ function rel(s){const d=parseTs(s);if(!d||isNaN(d))return '—';const m=Math.max
 function mmss(sec){sec=Math.max(0,Math.floor(sec));return pad(Math.floor(sec/60))+':'+pad(sec%60)}
 const STL={running:'EM EXECUÇÃO',ok:'OK',error:'FALHA',idle:'SEM EXEC.'};
 const JSTL={running:'ATENDENDO VOCÊ',ok:'DISPONÍVEL',idle:'DISPONÍVEL',error:'DISPONÍVEL'};
-const label=id=>id.replace('cron:govti-','cron · ').replace('office365','o365').replace(/-/g,' ');
+const labelTec=id=>id.replace('cron:govti-','cron · ').replace('office365','o365').replace(/-/g,' ');
+// nomes amigáveis: campo "nomes" do layout.json (o servidor manda em "titulo"); CONFIGURAR > Nomes > Técnicos volta ao id
+let TITULOS={};
+function titulosDe(s){const t={};[...(s.agents||[]),...(s.crons||[])].forEach(x=>{if(x.titulo)t[x.id]=x.titulo});return t}
+const label=id=>(typeof CFG!=='undefined'&&CFG.nomes==='tecnicos'?'':TITULOS[id])||labelTec(id);
+const fmtDur=s=>s==null?'':s<60?Math.round(s)+' s':s<3600?Math.round(s/60)+' min':(s/3600).toFixed(1).replace('.',',')+' h';
+const fmtTok=n=>n>=1e6?(n/1e6).toFixed(1).replace('.',',')+' mi':n>=1e3?Math.round(n/1e3)+' mil':String(n||0);
 
 /* ---------- geometria ---------- */
 function box(x0,y0,x1,y1,z0,z1,top,l,r,extra=''){

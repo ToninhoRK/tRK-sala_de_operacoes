@@ -16,29 +16,32 @@
   <div class="clock" id="fps" style="display:none"></div>
   <div class="clock" id="clock"></div>
   <div class="pill" id="live"><i></i><span>AO VIVO</span></div>
+  <button id="lst" aria-pressed="false" title="Ver as estações numa tabela ordenável (estado, sala, última execução, 7 dias, consumo)">LISTA</button>
+  <button id="lat" title="Mostrar ou esconder o painel lateral (mais espaço para a planta em telas menores)">PAINEL</button>
   <button id="cfg" title="Tema (planta, Modo TV, 3D), animação, rótulos e som">CONFIGURAR</button>
   <div id="cfgmenu"></div>
 </header>
 <div id="notice"></div>
 <div id="demo">MODO DEMONSTRAÇÃO · DADOS SIMULADOS (remova ?demo=1 da URL para ver os dados reais)</div>
 <section class="kpis">
-  <div class="kpi"><label>Em execução agora</label><b id="k-run" class="c">0</b></div>
-  <div class="kpi" title="Execuções de agentes + jobs agendados sem agente (o job que roda um agente conta uma vez, pelo agente)"><label>Execuções hoje</label><b id="k-today">0</b></div>
-  <div class="kpi"><label>Falhas hoje</label><b id="k-err">0</b></div>
-  <div class="kpi"><label>Estações com falha</label><b id="k-inerr">0</b><small id="k-tot"></small></div>
+  <div class="kpi" id="k-op" role="status" aria-live="polite" title="Veredito da operação: FALHA se alguma estação está em falha; ATENÇÃO se há agente sem ação, rotina atrasada ou fonte de dados com problema; senão NORMAL"><label>Operação</label><b id="k-op-v" class="z">—</b><span class="sub" id="k-op-s"></span></div>
+  <div class="kpi"><label>Em execução agora</label><b id="k-run" class="z">0</b></div>
+  <div class="kpi" title="Execuções de agentes + jobs agendados sem agente (o job que roda um agente conta uma vez, pelo agente)"><label>Execuções hoje</label><b id="k-today" class="z">0</b><span class="sub" id="k-tend"></span></div>
+  <div class="kpi"><label>Falhas hoje</label><b id="k-err" class="z">0</b><span class="sub" id="k-inerr"></span></div>
   <div class="kpi"><label>Última atividade</label><b id="k-last" style="font-size:18px;line-height:28px">—</b></div>
-  <div class="kpi" id="k-cs"><label>Claude · sessão 5 h</label><b id="k-cs-v" class="d">—</b><div class="bar"><i id="k-cs-b"></i></div><span class="sub" id="k-cs-s">sem dados</span></div>
+  <div class="kpi" id="k-cs"><label>Claude · 5 h</label><b id="k-cs-v" class="d">—</b><div class="bar"><i id="k-cs-b"></i></div><span class="sub" id="k-cs-s">sem dados</span></div>
   <div class="kpi" id="k-cw"><label>Claude · semana</label><b id="k-cw-v" class="d">—</b><div class="bar"><i id="k-cw-b"></i></div><span class="sub" id="k-cw-s">sem dados</span></div>
 </section>
 <main>
   <div class="stage">
-    <svg id="svg" viewBox="0 0 1040 640" preserveAspectRatio="xMidYMid meet"></svg>
+    <svg id="svg" viewBox="0 0 1040 640" preserveAspectRatio="xMidYMid meet" role="group" aria-label="Planta da sala: use Tab para percorrer as estações e Enter para abrir o detalhe"></svg>
+    <div id="lista" aria-label="Estações em lista"></div>
     <div class="legend">
       <span><i style="background:var(--cyan)"></i>EM EXECUÇÃO (sentado, digitando)</span>
       <span><i style="background:var(--green)"></i>ÚLTIMA EXEC. OK (circulando)</span>
       <span><i style="background:var(--red)"></i>FALHA (de pé, em alerta)</span>
+      <span><i style="background:var(--amber)"></i>ATRASADO OU SEM AÇÃO</span>
       <span><i style="background:var(--idle)"></i>SEM HISTÓRICO</span>
-      <span><i style="background:var(--amber)"></i>FALLBACK DE MODELO (no feed)</span>
     </div>
     <button id="som">SOM: LIGADO</button>
     <button id="fit" title="Centralizar a planta inteira na tela (ou duplo clique). Clique na placa de uma sala para aproximar.">CENTRALIZAR</button>
@@ -46,7 +49,7 @@
   <aside id="tvlista"><h2>Agora</h2><div id="tvitens"></div><div id="tvrodape"></div></aside>
   <aside id="lateral">
     <div class="sec" id="detail"><h2>Estação</h2><div class="empty">Selecione uma estação (ou o funcionário dela) para ver modelo, histórico e agenda.</div></div>
-    <div class="sec" style="border-bottom:0;padding-bottom:6px"><h2>Atividade recente <span id="feedn"></span></h2></div>
+    <div class="sec" style="border-bottom:0;padding-bottom:6px"><h2>Atividade recente <span id="feedn"></span></h2><div id="feedf" role="group" aria-label="Filtro da atividade recente"><button data-f="tudo" aria-pressed="true">TUDO</button><button data-f="excecoes" aria-pressed="false">SÓ EXCEÇÕES</button></div></div>
     <div id="feedwrap"></div>
   </aside>
 </main>
@@ -56,6 +59,7 @@
 <script src="/web/js/planta.js"></script>
 <script src="/web/js/funcionarios.js"></script>
 <script src="/web/js/interface.js"></script>
+<script src="/web/js/lista.js"></script>
 <script src="/web/js/diagnostico.js"></script>
 <script src="/web/js/som.js"></script>
 <script src="/web/js/planta3d.js"></script>

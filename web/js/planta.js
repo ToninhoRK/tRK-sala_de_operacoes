@@ -125,7 +125,7 @@ function zoneWalls(z){
   if(z.items.includes('jarvis')){ if(z.hn&&z.h-z.hn>=4.5)vaultWall(z,z.y+z.hn+.2,145);   // termina 0,4 un. antes da cafeteira
     else{z.vaultCompact=true;vaultWall(z,y0+.4,100)} }      // DIRETORIA rasa (sem canto de convivência): painel compacto, sem estante, desliza para fora do selo (fitDecor)
   else wallDecor(z,'left',y0+3.75,64/S,26,54,a=>{const o=P(x0,a,0);return `<g transform="matrix(-1,.5,0,1,${o[0]},${o[1]})"><rect x="0" y="-54" width="64" height="28" rx="2" fill="#0A1118" stroke="#2A4458"/>`+
-      [10,22,14,30,20,36].map((v,i)=>`<rect x="${6+i*9}" y="${-30-v*.55}" width="6" height="${v*.55}" fill="${i%3==2?'#F2A93B':'#2BD4F2'}" opacity=".75"/>`).join('')+`</g>`},'quadro');
+      [10,22,14,30,20,36].map((v,i)=>`<rect x="${6+i*9}" y="${-30-v*.55}" width="6" height="${v*.55}" fill="${i%3==2?'#4E6377':'#3A5166'}" opacity=".75"/>`).join('')+`</g>`},'quadro');
   if(z.tipo==='equipe')equipeWall(z);
   // placa do setor na parede dos fundos: sempre cabe na parede (sala estreita: começa mais à esquerda e comprime o texto)
   const nat=z.title.length*9.2+16, off=nat<=(z.w-.95)*S?.8:.4, len=Math.min(nat,(z.w-off-.15)*S);
@@ -258,7 +258,7 @@ function meetingProps(z){
   // mesa com notebooks e um ponto de apresentação
   obs('mesa de reunião',tx0,ty0,tx1,ty1); let tb=box(tx0,ty0,tx1,ty1,0,21,'#27415A','#14222F','#0D1823');
   [[.5,.8],[.5,2.4],[.5,4.0]].forEach(([dx,dy])=>{tb+=`<polygon points="${q(tx0+dx,ty0+dy,tx0+dx+.5,ty0+dy+.4,21)}" fill="#DCE6EE" opacity=".8"/>`});
-  tb+=`<polygon points="${q(cxm-.2,ty0+2.2,cxm+.2,ty0+2.7,21)}" fill="#2BD4F2" opacity=".7"/>`;
+  tb+=`<polygon points="${q(cxm-.2,ty0+2.2,cxm+.2,ty0+2.7,21)}" fill="#5B6B7C" opacity=".7"/>`;
   addItem((tx0+tx1)/2+(ty0+ty1)/2,mk(tb));
   // quadro branco na parede dos fundos, centrado
   const o=P(x0+z.w/2-1.4,y0,0); z.backBlocked=[[x0+z.w/2-1.9,x0+z.w/2+1.9]];   // trecho do quadro branco: a placa não desliza para cima dele
@@ -304,7 +304,7 @@ function sofaAt(xa,xb,ya,frente){
 }
 function rackDecor(cx,cy){ obs('rack',cx-.5,cy-.45,cx+.5,cy+.45);
   const o=P(cx-.5,cy+.45,0); let r=box(cx-.5,cy-.45,cx+.5,cy+.45,0,56,'#1A2B3E','#0F1A27','#0A121A')+`<g transform="matrix(1,.5,0,1,${o[0]},${o[1]})">`;
-  for(let i=0;i<5;i++)r+=`<rect x="3" y="${-50+i*10}" width="24" height="6" fill="#070C12" stroke="#2A3A4B" stroke-width=".6"/><rect x="5.5" y="${-48+i*10}" width="3" height="2" fill="#2BD4F2" opacity=".55"/><rect x="12" y="${-48+i*10}" width="12" height="2" fill="#1B2733"/>`;
+  for(let i=0;i<5;i++)r+=`<rect x="3" y="${-50+i*10}" width="24" height="6" fill="#070C12" stroke="#2A3A4B" stroke-width=".6"/><rect x="5.5" y="${-48+i*10}" width="3" height="2" fill="#5B6B7C" opacity=".7"/><rect x="12" y="${-48+i*10}" width="12" height="2" fill="#1B2733"/>`;
   addItem(cx+cy,mk(r+'</g>'));
 }
 function extraProps(z){
@@ -427,7 +427,7 @@ function stationBody(st,gBase,gOver){
 }
 function glyph(x,y){
   const t=d=>`<path d="${d}" transform="translate(${x} ${y})"/>`;
-  return `<g class="gl gl-run">${t('M-3 -4.5 4.5 0-3 4.5z')}</g><g class="gl gl-ok">${t('M-4.5 0 -1.2 3.2 4.5 -3.2')}</g><g class="gl gl-err">${t('M-3.6 -3.6 3.6 3.6M3.6 -3.6 -3.6 3.6')}</g><g class="gl gl-idle">${t('M-3.6 0H3.6')}</g>`;
+  return `<g class="gl gl-run">${t('M-3 -4.5 4.5 0-3 4.5z')}</g><g class="gl gl-ok">${t('M-4.5 0 -1.2 3.2 4.5 -3.2')}</g><g class="gl gl-err">${t('M-3.6 -3.6 3.6 3.6M3.6 -3.6 -3.6 3.6')}</g><g class="gl gl-idle">${t('M-3.6 0H3.6')}</g><g class="gl gl-late">${t('M0 -4.6A4.6 4.6 0 1 1 -.01 -4.6M0 -2.6V0L2.3 1.5')}</g>`;
 }
 function hex(x,y,r){let a=[];for(let i=0;i<6;i++){const t=Math.PI/3*i+Math.PI/6;a.push((x+r*Math.cos(t)).toFixed(1)+','+(y+r*Math.sin(t)).toFixed(1))}return a.join(' ')}
 function select(id){SEL=id;document.querySelectorAll('.st').forEach(e=>e.classList.toggle('selected',e.dataset.id===SEL&&!e.classList.contains('lb')));renderDetail()}

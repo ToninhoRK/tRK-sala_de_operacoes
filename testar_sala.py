@@ -98,7 +98,7 @@ def teste_3d(porta, perfil):
     for tentativa in range(3):     # Three.js carregado em rede (import dinâmico): o headless às vezes salva a página antes; repete
         out = subprocess.run([CHROME, "--headless=new", "--no-first-run", "--use-angle=swiftshader", "--enable-unsafe-swiftshader",
                               "--user-data-dir=" + perfil + "3d", "--window-size=1600,900", "--virtual-time-budget=15000", "--dump-dom",
-                              "http://127.0.0.1:%d/?tema=3d&debug=1&demo=1&seed=4&ff=30" % porta], capture_output=True, text=True, timeout=240,
+                              "http://127.0.0.1:%d/?tema=3d&debug=1&demo=1&atrasado=1&seed=4&ff=30" % porta], capture_output=True, text=True, timeout=240,
                              env=dict(os.environ, HOME=pwd.getpwuid(os.getuid()).pw_dir)).stdout
         m = re.search(r'<pre id="dbg3d"[^>]*>(.*?)</pre>', out, re.S)
         if m and "SOMBRA ok com" in m.group(1):
@@ -151,6 +151,12 @@ def cenario_arquivos(tmp, formato, base):
 
 
 def main():
+    # 1º os testes rápidos da lógica do servidor (sem navegador): status, atraso, privacidade, travas
+    r = subprocess.run([sys.executable, os.path.join(AQUI, "testes_servidor.py")], capture_output=True, text=True, timeout=120)
+    print("servidor: " + ((r.stderr.strip().splitlines() or ["?"])[-1]))
+    if r.returncode != 0:
+        print(r.stderr[-3000:])
+        raise SystemExit("testes do servidor falharam: a parte visual nem roda")
     if not os.path.exists(CHROME):
         raise SystemExit("Chrome não encontrado em %s (defina CHROME=...)" % CHROME)
     tmp = tempfile.mkdtemp(prefix="sala_teste_")
@@ -170,6 +176,9 @@ def main():
             casos.append(("Modo TV · demonstração", "debug=1&tema=tv&demo=1&travado=1&seed=4&ff=%s&jarvis=running" % ff))
             casos.append(("animação desligada · só rodando e falha", "debug=1&anim=desligada&rotulos=problemas&demo=1&seed=3&ff=60"))
             casos.append(("rótulos: nomes + rodando e falha", "debug=1&rotulos=ativos&demo=1&seed=5&ff=%s" % ff))
+            casos.append(("demonstração · atrasado + sem ação", "debug=1&demo=1&atrasado=1&travado=1&seed=6&ff=%s" % ff))
+            casos.append(("Modo TV · atrasado", "debug=1&tema=tv&demo=1&atrasado=1&seed=7&ff=%s" % ff))
+            casos.append(("nomes técnicos + modo lista", "debug=1&nomes=tecnicos&lista=1&demo=1&seed=8&ff=%s" % ff))
             for nome, q in casos:
                 linhas.append((nome,) + _rodar(porta, q, perfil, falhas, nome))
             falhas += teste_3d(porta, perfil)

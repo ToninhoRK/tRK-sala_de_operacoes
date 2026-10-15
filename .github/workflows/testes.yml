@@ -1,0 +1,22 @@
+name: testes
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  servidor:
+    # lógica do servidor (estados, atraso, eventos do executor, custo, privacidade da equipe, travas de segurança), sem navegador
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -W error::ResourceWarning testes_servidor.py

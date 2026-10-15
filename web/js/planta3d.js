@@ -207,13 +207,19 @@ function t3Montar(){
     const r=(st.isCron?58:90)/T3S, mat=new THREE.MeshBasicMaterial({color:0x5B6B7C,transparent:true,opacity:.2,depthWrite:false,side:THREE.DoubleSide});
     const an=new THREE.Mesh(new THREE.RingGeometry(r-.012,r+.012,64),mat); an.rotation.x=-Math.PI/2; an.position.set(st.cx,.006,st.cy);
     const pu=new THREE.Mesh(new THREE.RingGeometry(r-.02,r+.02,64),mat.clone()); pu.rotation.x=-Math.PI/2; pu.position.set(st.cx,.007,st.cy);
-    mundo.add(an,pu); T3.aneis[st.id]={an,pu,gb:svg.querySelector('.st[data-id="'+CSS.escape(st.id)+'"]')};
+    // luz como dado: poça de luz no piso, na cor do estado, só em quem pede atenção (rodando, falha, atrasado ou sem ação)
+    const po=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({map:t3Poca(),color:0x2BD4F2,transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending,toneMapped:false}));
+    po.rotation.x=-Math.PI/2; po.position.set(st.cx,.009,st.cy+(st.isCron?0:.15)); po.scale.setScalar(st.isCron?3.8:5); po.renderOrder=1;
+    mundo.add(an,pu,po); T3.aneis[st.id]={an,pu,po,gb:svg.querySelector('.st[data-id="'+CSS.escape(st.id)+'"]')};
   });
 
   /* 6. bonecos */
   Object.values(WORKERS).forEach(w=>{T3.bonecos[w.st.id]=t3Boneco(w);mundo.add(T3.bonecos[w.st.id].g)});
   T3.on=true; T3.montado=true; t3Camera(); t3Sync(true); t3Relatorio();
 }
+let T3POCA=null;
+function t3Poca(){if(T3POCA)return T3POCA;const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d'),g=x.createRadialGradient(64,64,0,64,64,64);
+  g.addColorStop(0,'rgba(255,255,255,.9)');g.addColorStop(.35,'rgba(255,255,255,.45)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,128,128);T3POCA=new T3.THREE.CanvasTexture(c);return T3POCA}
 let T3GRAD=null;
 function t3Grad(){if(T3GRAD)return T3GRAD;const c=document.createElement('canvas');c.width=2;c.height=64;const x=c.getContext('2d'),g=x.createLinearGradient(0,0,0,64);
   g.addColorStop(0,'#fff');g.addColorStop(1,'#303030');x.fillStyle=g;x.fillRect(0,0,2,64);T3GRAD=new T3.THREE.CanvasTexture(c);return T3GRAD}   // vidro: .16 no alto, ~.03 embaixo (como o degradê da planta)
@@ -316,7 +322,7 @@ function t3Boneco(w){
   return {g,corpo,tronco,cab,pL,pR,bL,bR,tablet,crach,ang:null,px:null,py:null};
 }
 const T3ESTCOR={running:'#2BD4F2',ok:'#7ED68B',error:'#F25C60',stuck:'#F2A93B',idle:'#5B6B7C'};
-function t3Estado(el){if(!el)return 'idle';const c=el.classList;return c.contains('error')?'error':c.contains('stuck')?'stuck':c.contains('running')?'running':c.contains('ok')?'ok':'idle'}
+function t3Estado(el){if(!el)return 'idle';const c=el.classList;return c.contains('error')?'error':(c.contains('stuck')||c.contains('late'))?'stuck':c.contains('running')?'running':c.contains('ok')?'ok':'idle'}
 function t3Pose(w,b,t){
   const m=poseOf(w), ph=w.phase, sw=Math.sin(ph*7.5);
   let legA=0,armL=0,armR=0,bob=0,tilt=0,lean=0;
@@ -365,7 +371,9 @@ function t3Sync(tudo){
       const c=t3Cor(tipo==='linha'?cs.stroke:cs.fill); if(!c)return; m.material.color.setRGB(c[0],c[1],c[2]);
       m.material.opacity=c[3]*(+(tipo==='linha'?cs.strokeOpacity:cs.fillOpacity))*(+cs.opacity)});
     const t=agora/1000, anima=CFG.anim==='completa';
-    Object.values(T3.aneis).forEach(({an,pu,gb})=>{const e=t3Estado(gb), c=T3ESTCOR[e==='stuck'?'running':e];
+    Object.values(T3.aneis).forEach(({an,pu,po,gb})=>{const e=t3Estado(gb), c=T3ESTCOR[e];
+      const forte={error:1,stuck:.95,running:.55}[e]||0; po.visible=forte>0;
+      if(forte){po.material.color.set(c); po.material.opacity=forte*(anima?(.8+.2*Math.sin(t*(e==='error'?6:2.4))):1)}
       an.material.color.set(c); an.material.opacity=(e==='ok'||e==='idle')?.12:.3;
       const pulsa=anima&&(e==='running'||e==='error'); pu.visible=pulsa;
       if(pulsa){const k=(t/(e==='error'?1.1:2.2))%1; pu.material.color.set(c); pu.material.opacity=.6*(1-k); pu.scale.setScalar(1+k*.35)}});
