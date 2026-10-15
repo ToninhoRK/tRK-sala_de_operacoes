@@ -41,6 +41,9 @@ def subir(env_extra):
     proc.kill(); raise SystemExit("servidor de teste não subiu")
 
 
+FPS = {}
+
+
 def pagina(porta, consulta, perfil):
     out = subprocess.run([CHROME, "--headless=new", "--disable-gpu", "--no-first-run", "--user-data-dir=" + perfil,
                           "--window-size=1920,1080", "--virtual-time-budget=30000", "--dump-dom",
@@ -49,6 +52,8 @@ def pagina(porta, consulta, perfil):
     m = re.search(r'<pre id="dbg">(OVERLAPS .*?)</pre>', out, re.S)   # o relatório começa sempre por OVERLAPS (o código da página vem embutido no HTML)
     if not m:
         return None, "página sem diagnóstico (erro ao carregar?)"
+    f = re.search(r'<span class="sub" id="k-fps"[^>]*>([^<]*)</span>', out)   # fps do card Operação (o valor real só se mede num navegador de verdade)
+    FPS[consulta] = f.group(1) if f else None
     txt = m.group(1)
     vals = {}
     for c in CONTADORES:
@@ -222,6 +227,10 @@ def _rodar(porta, q, perfil, falhas, nome):
     if vals is None:
         falhas.append("%s: %s" % (nome, det)); return (tuple([None] * len(CONTADORES)),)
     ruins = [c for c in CONTADORES if vals[c] != 0]
+    fps = FPS.get(q)
+    esperado = r"^animação desligada$" if "anim=desligada" in q else r"^(\d+ fps( · reduzida)?|medindo fps…)$"   # sob tempo virtual o relógio não anda: o número real é medido em fps_real()
+    if fps is None or not re.match(esperado, fps):
+        falhas.append("%s: fps do card Operação fora do formato: %r" % (nome, fps))
     if ruins:
         falhas.append("%s: %s\n   %s" % (nome, ", ".join("%s=%s" % (c, vals[c]) for c in ruins), det.replace("\n", "\n   ")))
     return (tuple(vals[c] for c in CONTADORES),)

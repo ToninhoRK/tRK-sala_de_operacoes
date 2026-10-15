@@ -45,7 +45,8 @@ No topo, um veredito responde antes de tudo: **NORMAL**, **ATENÇÃO** ou **FALH
 - **Atividade sem ruído:** execuções repetidas viram uma linha só ("×6 · desde 09:00"), o destaque fica só para o que fugiu do normal e um clique mostra **só as exceções**.
 - **Tendência e consumo:** 7 dias de execuções e falhas no topo e em cada estação, com duração de cada execução e tokens e custo estimado por agente.
 - **Nada some sem aviso:** execução que morreu no meio do caminho, sem chegar ao fim, aparece como **INTERROMPIDA**.
-- **Modo lista:** as mesmas estações numa tabela ordenável por estado, sala, última execução ou consumo. Bom para o celular e para achar uma estação rápido.
+- **Escritório ou lista:** a chave OFFICE | LISTA no topo alterna entre a planta e as mesmas estações numa tabela ordenável por estado, sala, última execução ou consumo (a visão ativa fica acesa). Bom para o celular e para achar uma estação rápido. SOM e CENTRALIZAR também ficam no topo, junto com os demais controles.
+- **Fluidez à vista:** o card Operação mostra os quadros por segundo da animação, atualizados a cada segundo (o normal é a taxa da tela: 60 num monitor comum). Número bem abaixo disso indica que a página está pesada para aquela máquina.
 - **Pelo teclado:** Tab percorre as estações, Enter abre o detalhe e Esc fecha. As estações têm descrição para leitor de tela.
 - **Do seu jeito:** pelo menu **CONFIGURAR** você escolhe o tema, a intensidade da animação, quais rótulos aparecem e se as estações mostram nomes amigáveis ("Consulta AD") ou o id técnico.
 - **A equipe no mesmo lugar (opcional):** chamados em aberto, sem responsável, vencidos e encerrados no Agidesk, e o tempo de atendimento da semana, sempre como total da equipe. Ninguém vira placar individual.

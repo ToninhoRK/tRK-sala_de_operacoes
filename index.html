@@ -16,7 +16,9 @@
   <div class="clock" id="fps" style="display:none"></div>
   <div class="clock" id="clock"></div>
   <div class="pill" id="live"><i></i><span>AO VIVO</span></div>
-  <button id="lst" aria-pressed="false" title="Ver as estações numa tabela ordenável (estado, sala, última execução, 7 dias, consumo)">LISTA</button>
+  <div id="visao" role="group" aria-label="Visão"><button data-v="office" aria-pressed="true" title="O escritório: planta com as estações e os funcionários">OFFICE</button><button data-v="lista" aria-pressed="false" title="As estações numa tabela ordenável (estado, sala, última execução, 7 dias, consumo)">LISTA</button></div>
+  <button id="som">SOM: LIGADO</button>
+  <button id="fit" title="Centralizar a planta inteira na tela (ou duplo clique). Clique na placa de uma sala para aproximar.">CENTRALIZAR</button>
   <button id="lat" title="Mostrar ou esconder o painel lateral (mais espaço para a planta em telas menores)">PAINEL</button>
   <button id="cfg" title="Tema (planta, Modo TV, 3D), animação, rótulos e som">CONFIGURAR</button>
   <div id="cfgmenu"></div>
@@ -24,7 +26,7 @@
 <div id="notice"></div>
 <div id="demo">MODO DEMONSTRAÇÃO · DADOS SIMULADOS (remova ?demo=1 da URL para ver os dados reais)</div>
 <section class="kpis">
-  <div class="kpi" id="k-op" role="status" aria-live="polite" title="Veredito da operação: FALHA se alguma estação está em falha; ATENÇÃO se há agente sem ação, rotina atrasada ou fonte de dados com problema; senão NORMAL"><label>Operação</label><b id="k-op-v" class="z">—</b><span class="sub" id="k-op-s"></span></div>
+  <div class="kpi" id="k-op" role="status" aria-live="polite" title="Veredito da operação: FALHA se alguma estação está em falha; ATENÇÃO se há agente sem ação, rotina atrasada ou fonte de dados com problema; senão NORMAL"><label>Operação</label><b id="k-op-v" class="z">—</b><span class="sub" id="k-op-s"></span><span class="sub" id="k-fps" aria-hidden="true" title="Quadros por segundo da animação, medidos neste navegador a cada segundo. O normal é a taxa da tela (60 num monitor comum, até 120 em telas ProMotion); na animação reduzida, cerca de 15. Bem abaixo disso = página pesada para esta máquina.">medindo fps…</span></div>
   <div class="kpi"><label>Em execução agora</label><b id="k-run" class="z">0</b></div>
   <div class="kpi" title="Execuções de agentes + jobs agendados sem agente (o job que roda um agente conta uma vez, pelo agente)"><label>Execuções hoje</label><b id="k-today" class="z">0</b><span class="sub" id="k-tend"></span></div>
   <div class="kpi"><label>Falhas hoje</label><b id="k-err" class="z">0</b><span class="sub" id="k-inerr"></span></div>
@@ -37,14 +39,12 @@
     <svg id="svg" viewBox="0 0 1040 640" preserveAspectRatio="xMidYMid meet" role="group" aria-label="Planta da sala: use Tab para percorrer as estações e Enter para abrir o detalhe"></svg>
     <div id="lista" aria-label="Estações em lista"></div>
     <div class="legend">
-      <span><i style="background:var(--cyan)"></i>EM EXECUÇÃO (sentado, digitando)</span>
-      <span><i style="background:var(--green)"></i>ÚLTIMA EXEC. OK (circulando)</span>
-      <span><i style="background:var(--red)"></i>FALHA (de pé, em alerta)</span>
+      <span><i style="background:var(--cyan)"></i>EM EXECUÇÃO</span>
+      <span><i style="background:var(--green)"></i>ÚLTIMA EXEC. OK</span>
+      <span><i style="background:var(--red)"></i>FALHA</span>
       <span><i style="background:var(--amber)"></i>ATRASADO OU SEM AÇÃO</span>
       <span><i style="background:var(--idle)"></i>SEM HISTÓRICO</span>
     </div>
-    <button id="som">SOM: LIGADO</button>
-    <button id="fit" title="Centralizar a planta inteira na tela (ou duplo clique). Clique na placa de uma sala para aproximar.">CENTRALIZAR</button>
   </div>
   <aside id="tvlista"><h2>Agora</h2><div id="tvitens"></div><div id="tvrodape"></div></aside>
   <aside id="lateral">

@@ -1,6 +1,7 @@
 /* Sala de Operações · Modo lista, filtro da atividade recente e teclado (Fase 7, 15/10/2026).
    Modo lista: as mesmas estações numa tabela ordenável (estado, nome, sala, última, hoje, 7 dias, consumo), boa para celular,
-   leitor de tela e para achar uma estação rápido. Botão LISTA no cabeçalho ou ?lista=1; fica salvo no navegador.
+   leitor de tela e para achar uma estação rápido. Chave OFFICE | LISTA no cabeçalho (a opção ativa fica acesa) ou ?lista=1;
+   fica salvo no navegador.
    Teclado: Tab percorre as estações da planta (e as linhas da lista); Enter ou espaço abre o detalhe; Esc fecha. */
 let FEEDF=(()=>{try{return localStorage.getItem('sala_feed')==='excecoes'?'excecoes':'tudo'}catch(e){return 'tudo'}})();
 let LSORT={k:'est',d:1};
@@ -24,12 +25,12 @@ function renderLista(s){
 }
 function listaLigar(on){
   document.body.classList.toggle('lista',on); try{localStorage.setItem('sala_lista',on?'1':'0')}catch(e){}
-  $('lst').setAttribute('aria-pressed',String(on)); if(on)renderLista(STATE); else setTimeout(()=>window.dispatchEvent(new Event('resize')),0);
+  document.querySelectorAll('#visao button').forEach(b=>b.setAttribute('aria-pressed',String((b.dataset.v==='lista')===on))); if(on)renderLista(STATE); else setTimeout(()=>window.dispatchEvent(new Event('resize')),0);
 }
 function limparSel(){SEL=null;document.querySelectorAll('.st.selected').forEach(e=>e.classList.remove('selected'));
   $('detail').innerHTML='<h2>Estação</h2><div class="empty">Selecione uma estação (ou o funcionário dela) para ver modelo, histórico e agenda.</div>';renderLista(STATE)}
 (function(){
-  $('lst').addEventListener('click',()=>listaLigar(!document.body.classList.contains('lista')));
+  $('visao').addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(b)listaLigar(b.dataset.v==='lista')});
   $('lista').addEventListener('click',e=>{const b=e.target.closest('th button');
     if(b){const k=b.dataset.k;LSORT=LSORT.k===k?{k,d:-LSORT.d}:{k,d:k==='hoje'||k==='sem'||k==='tok'||k==='ult'?-1:1};renderLista(STATE);const nb=$('lista').querySelector(`th button[data-k="${k}"]`);if(nb)nb.focus();return}
     const r=e.target.closest('tr[data-id]'); if(r){select(r.dataset.id);renderLista(STATE)}});

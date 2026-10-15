@@ -216,12 +216,19 @@ function renderWorker(w,t){
 /* ---------- laço de simulação ---------- */
 let LAST=0, SIMT=0;
 function sim(dt){SIMT+=dt;Object.values(WORKERS).forEach(w=>{stepWorker(w,dt);renderWorker(w,SIMT)});sortWorld();if(DBG)probe()}
-let FR=0,FT=0,FMAX=0;
+let FR=0,FT=0,FMAX=0,FD=0;   // FR = voltas do laço (taxa da tela); FD = quadros desenhados de fato (o que aparece como fps)
 let ACUM=0;
+// fps no card Operação (sempre visível, sem cor e fora do veredito); ?fps=1 mostra também voltas do laço e o pior quadro no topo
+function fpsMostrar(janela){
+  const n=Math.round(FD*1000/janela), el=$('k-fps');
+  if(el)el.textContent=CFG.anim==='desligada'?'animação desligada':n+' fps'+(CFG.anim==='reduzida'?' · reduzida':'');
+  if(QS.has('fps')){$('fps').style.display='';$('fps').textContent=Math.round(FR*1000/janela)+' voltas/s · '+n+' fps · script '+FMAX.toFixed(1)+' ms (pior quadro)'}
+}
 function loop(ts){const dt=Math.min(.1,(ts-LAST)/1000||0);LAST=ts;
   const t0=performance.now();
-  if(built&&CFG.anim==='completa')sim(dt);
-  else if(built&&CFG.anim==='reduzida'){ACUM+=dt;if(ACUM>=1/15){sim(Math.min(.1,ACUM));ACUM=0}}   // 15 quadros/s
+  if(built&&CFG.anim==='completa'){sim(dt);FD++}
+  else if(built&&CFG.anim==='reduzida'){ACUM+=dt;if(ACUM>=1/15-.004){sim(Math.min(.1,ACUM));ACUM=0;FD++}}   // 15 quadros/s
   const c=performance.now()-t0; FMAX=Math.max(FMAX,c);
-  if(QS.has('fps')){FR++;if(ts-FT>1000){$('fps').style.display='';$('fps').textContent=FR+' fps · script '+FMAX.toFixed(1)+' ms (pior quadro)';FR=0;FT=ts;FMAX=0}}
+  FR++;
+  if(ts-FT>=1000){ if(FT&&ts-FT<2500)fpsMostrar(ts-FT); FR=0;FD=0;FT=ts;FMAX=0 }   // janela longa = aba estava escondida (o navegador pausa): descarta, não mostra número falso
   requestAnimationFrame(loop)}

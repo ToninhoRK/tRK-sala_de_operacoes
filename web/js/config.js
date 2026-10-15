@@ -25,6 +25,7 @@ function cfgAplicar(){
   const b=document.body;
   b.classList.toggle('tv',CFG.tema==='tv');
   ['reduzida','desligada'].forEach(a=>b.classList.toggle('anim-'+a,CFG.anim===a));
+  {const f=document.getElementById('k-fps'); if(f)f.textContent=CFG.anim==='desligada'?'animação desligada':'medindo fps…'}   // o número vem do laço, a cada segundo
   ['ativos','problemas','nenhum'].forEach(r=>b.classList.toggle('rot-'+r,CFG.rotulos===r));
   if(typeof cfgMenuSync==='function')cfgMenuSync();
 }
