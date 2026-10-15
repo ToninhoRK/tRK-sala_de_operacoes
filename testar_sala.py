@@ -89,6 +89,39 @@ def api(porta):
     return erros, d
 
 
+def teste_pixel(porta, perfil):
+    """Tema pixel art (/?tema=pixel&debug=1, com demonstração): a arte abre, cada estação e cada boneco da planta são desenhados,
+    nenhum erro de script, o diagnóstico da planta continua zerado, e a pasta entre salas (primeiro fluxo do layout) é entregue."""
+    out = subprocess.run([CHROME, "--headless=new", "--no-first-run", "--user-data-dir=" + perfil + "px", "--window-size=1600,900",
+                          "--virtual-time-budget=12000", "--dump-dom",
+                          "http://127.0.0.1:%d/?tema=pixel&debug=1&demo=1&atrasado=1&seed=4&ff=30&testpasta=1" % porta],
+                         capture_output=True, text=True, timeout=240, env=dict(os.environ, HOME=pwd.getpwuid(os.getuid()).pw_dir)).stdout
+    m = re.search(r'<pre id="dbgpx"[^>]*>(.*?)</pre>', out, re.S)
+    if not m:
+        return ["Pixel: página sem relatório (não carregou)"]
+    v = dict(l.split(" ", 1) for l in m.group(1).splitlines() if " " in l and l.split(" ", 1)[0].isupper())
+    erros = []
+    if v.get("PIXEL") != "ok": erros.append("Pixel: a arte não abriu (%s)" % v.get("PIXEL"))
+    if v.get("ESTACOES") != v.get("ESPERADAS"): erros.append("Pixel: %s estações de %s esperadas" % (v.get("ESTACOES"), v.get("ESPERADAS")))
+    b = (v.get("BONECOS") or "0 DE ?").split(" DE ")
+    if b[0] != b[-1] or b[0] == "0": erros.append("Pixel: bonecos %s" % v.get("BONECOS"))
+    if int(v.get("QUADROS") or 0) < 1: erros.append("Pixel: nenhum quadro desenhado")
+    if v.get("RECORTES_OCULTOS") != "0": erros.append("Pixel: %s recortes de placa/painel invisíveis (o texto some)" % v.get("RECORTES_OCULTOS"))
+    if v.get("ERROS") != "0": erros.append("Pixel: erros de script: " + m.group(1)[-400:])
+    d = re.search(r'<pre id="dbg">(OVERLAPS .*?)</pre>', out, re.S)
+    if d:
+        ruins = {k: n for k, n in re.findall(r"^([A-Z_]+) (\d+)", d.group(1), re.M) if n != "0"}
+        if ruins: erros.append("Pixel: diagnóstico da planta com o pixel art ligado: %s" % ruins)
+        pasta = re.search(r"^pasta (.*)$", d.group(1), re.M)
+        if not pasta or "entregue em NUNCA" in pasta.group(1) or "NÃO SAIU" in pasta.group(1):
+            erros.append("Pasta entre salas: %s" % (pasta.group(1) if pasta else "teste não rodou (layout sem fluxo com as duas estações?)"))
+    else:
+        erros.append("Pixel: diagnóstico da planta ausente com o pixel art ligado")
+    print("Pixel: %s, %s/%s estações, bonecos %s, %s peças, %s quadros, %s erros; %s" % (v.get("PIXEL"), v.get("ESTACOES"), v.get("ESPERADAS"),
+          v.get("BONECOS"), v.get("PECAS"), v.get("QUADROS"), v.get("ERROS"), ("pasta " + pasta.group(1)) if d and pasta else "pasta: —"))
+    return erros
+
+
 def teste_3d(porta, perfil):
     """Tema 3D (/?tema=3d&debug=1, com demonstração): WebGL abre (SwiftShader no headless), cada estação e cada boneco da
     planta tem a sua peça 3D, os objetos de parede viram textura, a sombra escurece o piso à frente de um rack (sonda),
@@ -183,10 +216,12 @@ def main():
             casos.append(("rótulos: nomes + rodando e falha", "debug=1&rotulos=ativos&demo=1&seed=5&ff=%s" % ff))
             casos.append(("demonstração · atrasado + sem ação", "debug=1&demo=1&atrasado=1&travado=1&seed=6&ff=%s" % ff))
             casos.append(("Modo TV · atrasado", "debug=1&tema=tv&demo=1&atrasado=1&seed=7&ff=%s" % ff))
+            casos.append(("Pixel art · Modo TV · demonstração", "debug=1&tema=pixeltv&demo=1&atrasado=1&seed=4&ff=%s" % ff))
             casos.append(("nomes técnicos + modo lista", "debug=1&nomes=tecnicos&lista=1&demo=1&seed=8&ff=%s" % ff))
             for nome, q in casos:
                 linhas.append((nome,) + _rodar(porta, q, perfil, falhas, nome))
             falhas += teste_3d(porta, perfil)
+            falhas += teste_pixel(porta, perfil)
         finally:
             proc.kill()
         for n in ("novo", "antigo"):

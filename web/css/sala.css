@@ -184,6 +184,13 @@ body.rot-ativos .st.lb.ok:not([data-id^="equipe:"]) .sx,body.rot-ativos .st.lb.i
 body.t3 .stage svg{position:relative}
 body.t3 #svg>g:not(:last-child){visibility:hidden}
 body.t3 #svg .wk .bub{visibility:visible}
+/* tema pixel art (planta_pixel.js): a arte fica numa tela atrás do SVG; do SVG ficam visíveis só os textos e a camada de rótulos/selos */
+#pxcv{position:absolute;left:0;top:0;pointer-events:none;image-rendering:pixelated;image-rendering:crisp-edges}
+body.tpx .stage svg{position:relative}
+body.tpx #svg>g:not(:last-child) *{visibility:hidden}
+body.tpx #svg>g:not(:last-child) text{visibility:visible}
+body.tpx #svg>g:not(:last-child) clipPath *{visibility:visible}   /* polígono de recorte escondido = recorte vazio: sumiam os textos das placas e painéis */
+body.tpx #svg>g:not(:last-child) .wk text{visibility:hidden!important}
 #faixa3d{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:5;color:var(--amber);font:600 12px var(--mono);background:#0A1118;border:1px solid var(--amber);padding:6px 10px;border-radius:3px}
 body.rot-problemas .st.lb.ok:not([data-id^="equipe:"]),body.rot-problemas .st.lb.idle:not([data-id^="equipe:"]){display:none}
 body.anim-reduzida .st .pulse,body.anim-desligada .st .pulse{display:none!important}

@@ -72,6 +72,7 @@ function mkWorker(st){
     <g class="torso">${hairBack}${body}${IM?'<rect x="-4.2" y="-30.6" width="8.4" height="5.8" rx="1" fill="#16202B" stroke="#4A5663" stroke-width=".6"/><rect x="-3" y="-29.4" width="2" height="1.2" fill="#2BD4F2"/><rect x="-.4" y="-29.4" width="3.4" height="1.2" fill="#2BD4F2" opacity=".6"/><rect x="-3" y="-27.1" width="6" height="1" fill="#2BD4F2" opacity=".4"/>':'<rect class="lany" x="-2.8" y="-26" width="5.6" height="4.2" rx=".8"/>'}</g>
     <g class="armL" transform="translate(-8.6,-34)">${arm()}</g>
     <g class="armR" transform="translate(8.6,-34)">${arm()}</g>
+    <g class="pasta" style="display:none"><rect x="-6.5" y="-31" width="13" height="9.5" rx="1" fill="#C9D3DD" stroke="#5B6B7C" stroke-width=".7"/><rect x="-6.5" y="-33" width="5.5" height="2.6" rx=".8" fill="#AEBBC8"/><path d="M-4 -27.5H4M-4 -25H2" stroke="#8FA1B5" stroke-width=".8"/></g>
     <g class="head">
       ${IM?`<path d="M0 -47.6 V-50.6" stroke="${RED2}" stroke-width=".9"/><circle cx="0" cy="-51.2" r="1.1" fill="#2BD4F2"/><rect x="-6.3" y="-47.8" width="12.6" height="12.4" rx="5" fill="${RED}" stroke="${RED2}" stroke-width=".7"/><rect x="-5" y="-44" width="10" height="5" rx="2.2" fill="#16202B"/><rect x="-7.1" y="-43.2" width="1.4" height="3.4" rx=".6" fill="${GOLD}"/><rect x="5.7" y="-43.2" width="1.4" height="3.4" rx=".6" fill="${GOLD}"/>`:`<circle cx="0" cy="-41.5" r="5.9" fill="${skin}"/>${hairTop}`}
       <g class="eyes">${IM?`<rect x="-4.1" y="-42.4" width="8.2" height="2" rx="1" fill="#7FF0FF"/><rect x="-4.1" y="-42.4" width="8.2" height="2" rx="1" fill="none" stroke="#2BD4F2" stroke-width=".5"/>`:`<circle cx="-2.1" cy="-41" r=".95" fill="#10151C"/><circle cx="2.1" cy="-41" r=".95" fill="#10151C"/>${glasses?`<g fill="none" stroke="#10151C" stroke-width=".7"><circle cx="-2.4" cy="-41" r="2"/><circle cx="2.4" cy="-41" r="2"/><path d="M-.4 -41H.4"/></g>`:''}`}</g>
@@ -82,7 +83,7 @@ function mkWorker(st){
   root.addEventListener('click',()=>select(st.it.decor?'equipe:agidesk':st.id));
   const w={st,root,spr:root.querySelector('.spr'),legL:root.querySelector('.legL'),legR:root.querySelector('.legR'),armL:root.querySelector('.armL'),armR:root.querySelector('.armR'),
     legs:root.querySelector('.legs'),head:root.querySelector('.head'),eyes:root.querySelector('.eyes'),bub:root.querySelector('.bub'),dots:root.querySelector('.dots'),ex:root.querySelector('.ex'),
-    tablet:root.querySelector('.tablet'),sh:root.querySelector('.sh'),dust:root.querySelector('.dust'),x:0,y:0,face:0,path:[],at:null,dest:null,run:0,timer:0,phase:rnd()*6,sit:0,status:'idle'};
+    tablet:root.querySelector('.tablet'),pastaEl:root.querySelector('.pasta'),carry:false,sh:root.querySelector('.sh'),dust:root.querySelector('.dust'),x:0,y:0,face:0,path:[],at:null,dest:null,run:0,timer:0,phase:rnd()*6,sit:0,status:'idle'};
   const run=st.it.status==='running'||st.isEquipe;
   const s0=run?st.stops.home:wanderPick(w,true);
   w.at=s0; w.x=s0.pos[0]; w.y=s0.pos[1]; w.face=s0.face; w.timer=rr(2,6);
@@ -130,7 +131,7 @@ function stepWorker(w,dt){
   w.status=w.st.it.status;
   if(w.path.length){
     const wantNow=desired(w);
-    if(wantNow&&!(w.dest&&same(w.dest,wantNow))){ if(replan(w,wantNow))w.run=wantNow.type==='side'?RUN_ERR:RUN_OK }
+    if(wantNow&&!(w.dest&&same(w.dest,wantNow))){ if(replan(w,wantNow)){w.run=wantNow.type==='side'?RUN_ERR:RUN_OK;w.carry=false;w.pastaPend=null} }
     const [tx,ty]=w.path[0]; const dx=tx-w.x, dy=ty-w.y, d=Math.hypot(dx,dy), m=(w.run||SPEED)*dt;
     const sxm=dx-dy; if(Math.abs(sxm)>.05)w.face=sxm>0?1:-1;
     if(d<=m){w.x=tx;w.y=ty;w.path.shift();if(!w.path.length)arrive(w)}
@@ -138,7 +139,7 @@ function stepWorker(w,dt){
     return;
   }
   const want=desired(w);
-  if(want){ if(!same(w.at,want)){go(w,want);w.run=want.type==='side'?RUN_ERR:RUN_OK} return }
+  if(want){ if(!same(w.at,want)){go(w,want);w.run=want.type==='side'?RUN_ERR:RUN_OK} w.carry=false; w.pastaPend=null; return }
   w.timer-=dt;
   if(w.timer<=0){
     let s=wanderPick(w,false),n=0; while(same(s,w.at)&&n++<4)s=wanderPick(w,false);
@@ -147,9 +148,11 @@ function stepWorker(w,dt){
   }
 }
 function go(w,s){w.dest=s;w.path=route(w.at,s);if(!w.path.length)arrive(w)}
-const DUR={poster:[6,10],pace:[3,6],shelf:[6,10],printer:[5,8],cooler:[4,7],visit:[6,11],meeting:[9,16],side:[4,8],seat:[3,6],work:[4,8]};
+const DUR={entrega:[3,4.5],poster:[6,10],pace:[3,6],shelf:[6,10],printer:[5,8],cooler:[4,7],visit:[6,11],meeting:[9,16],side:[4,8],seat:[3,6],work:[4,8]};
 function arrive(w){
   const s=w.dest||w.at; w.at=s; w.dest=null; w.face=s.face; w.run=0;
+  if(w.pastaPend){const p=w.pastaPend;w.pastaPend=null;go(w,p);return}      // entrega pedida no meio de um trajeto: segue para ela
+  if(s.type==='entrega'){w.carry=false;PASTAS.entregues++}
   const d=(w.st.isJarvis&&s.type==='seat')?[9,18]:(DUR[s.type]||[4,8]); w.timer=rr(d[0],d[1]);
 }
 function poseOf(w){
@@ -160,7 +163,7 @@ function poseOf(w){
   if(s==='pace')return 'stand';
   if(s==='work')return st==='running'?'operate':(st==='error'?'alert':'stand');
   if(s==='side')return st==='error'?'alert':'stand';
-  return {shelf:'reach',printer:'printer',cooler:'drink',visit:'talk',meeting:'talk'}[s]||'stand';
+  return {shelf:'reach',printer:'printer',cooler:'drink',visit:'talk',meeting:'talk',entrega:'talk'}[s]||'stand';
 }
 function renderWorker(w,t){
   const m=poseOf(w), ph=w.phase;
@@ -197,6 +200,7 @@ function renderWorker(w,t){
   w.eyes.setAttribute('transform',`translate(${fx} 0)`);
   w.sh.setAttribute('opacity',seated?0:1);
   w.tablet.style.display=m==='read'?'':'none';
+  w.pastaEl.style.display=w.carry?'':'none';
   w.dust.style.display=m==='run'?'':'none';
   if(m==='run'){w.dust.setAttribute('transform',`translate(${(-(w.face<0?-1:1)*10).toFixed(1)} 0)`);[...w.dust.children].forEach((c,i)=>c.setAttribute('opacity',(.12+.3*Math.abs(Math.sin(t*9-i*1.3))).toFixed(2)))}
   const stuck=w.st.it.status==='running'&&w.st.it.sem_acao_s>=300;
@@ -211,6 +215,26 @@ function renderWorker(w,t){
   const [sx,sy]=P(w.x,w.y); w.root.setAttribute('transform',`translate(${sx.toFixed(1)} ${sy.toFixed(1)})`);
   w.item.key=w.x+w.y; w.item.node.dataset.k=w.item.key;
   if(QS.has('debug'))(window.__SHELVES||[]).forEach(([a,b,c,d])=>{if(w.x>a-.2&&w.x<c+(+QS.get('shm')||.35)&&w.y>b-.15&&w.y<d+.15){window.__shelfHits=(window.__shelfHits||0)+1;window.__shelfMin=Math.min(window.__shelfMin??9,w.x-c)}});
+}
+
+/* ---------- pasta entre salas (cadeia de agentes, "fluxos" do layout.json) ----------
+   Quando um agente da cadeia começa a rodar (ex.: rateio_o365), o funcionário da estação anterior (microsoft_365) leva uma
+   pasta até a mesa dele: a entrega dos dados de uma etapa para a outra. Só se quem leva está livre (rodando ou em falha,
+   ele fica na própria mesa: o dado manda). A pasta é cinza-azulada, fora das cores de estado. */
+const PASTAS={pedidas:0,entregues:0};
+function entregarPasta(a,b){
+  const w=WORKERS[a], dst=STATIONS[b]; if(!w||!dst||a===b||CFG.anim==='desligada')return false;
+  if(desired(w)||w.carry||w.pastaPend)return false;
+  const alvo=Object.assign({},dst.stops.visit,{type:'entrega'});
+  w.carry=true; PASTAS.pedidas++;
+  if(w.path.length){ if(!replan(w,alvo))w.pastaPend=alvo }
+  else go(w,alvo);
+  w.run=0; return true;
+}
+// status anterior → atual (chamado pelo update): quem passou a rodar recebe a pasta de quem vem antes na cadeia
+function pastasChecar(antes){
+  ((STATE&&STATE.layout&&STATE.layout.flows)||[]).forEach(([a,b])=>{const st=STATIONS[b];
+    if(st&&st.it.status==='running'&&antes[b]&&antes[b]!=='running')entregarPasta(a,b)});
 }
 
 /* ---------- laço de simulação ---------- */

@@ -8,7 +8,7 @@
 
 ---
 
-## Três jeitos de ver a mesma operação
+## Quatro jeitos de ver a mesma operação
 
 ### Planta: o dia a dia
 A visão completa para quem acompanha de perto. Cada sala reúne um tipo de agente, e cada mesa mostra o nome do agente e o estado dele. Ao lado ficam o histórico de execuções, o modelo usado e a próxima rodada agendada. Clique numa mesa e veja os detalhes.
@@ -22,6 +22,11 @@ Feito para ser lido de longe. Os indicadores ficam grandes, o painel lateral sai
 A mesma planta, agora em 3D de verdade, com volume, luz e sombra. O ângulo, os móveis, as pessoas e os rótulos continuam no mesmo lugar, então a sala continua sendo a sua.
 
 ![Tema 3D: a mesma planta com volume, luz e sombra](docs/sala-3d.png)
+
+### Pixel art: a mesma sala, com cara de jogo
+A mesma planta redesenhada em pixels, com contorno em cada móvel e funcionários desenhados à mão, com as mesmas roupas e os mesmos gestos. Os nomes e os estados continuam nítidos por cima. Aproxime uma sala (roda do mouse ou clique na placa) para ver cada pixel. Também existe em versão para a TV.
+
+![Tema pixel art: a mesma planta desenhada em pixels](docs/sala-pixel.png)
 
 ---
 
@@ -40,6 +45,7 @@ No topo, um veredito responde antes de tudo: **NORMAL**, **ATENÇÃO** ou **FALH
 
 ## Destaques
 
+- **Trabalho passando de mão em mão:** quando um agente de uma cadeia começa a rodar, o funcionário da etapa anterior leva uma pasta até a mesa dele. Dá para ver a entrega de dados acontecer entre as salas.
 - **Rotina atrasada não passa despercebida:** se um job agendado não disparou na hora (ou um agente passou do intervalo combinado sem rodar), a estação fica âmbar e o alarme avisa. Verde só quando está realmente em dia.
 - **Alerta sonoro:** um som curto quando algo falha, trava ou atrasa, e outro mais suave quando volta ao normal. A sala continua de olho mesmo com a aba em segundo plano.
 - **Atividade sem ruído:** execuções repetidas viram uma linha só ("×6 · desde 09:00"), o destaque fica só para o que fugiu do normal e um clique mostra **só as exceções**.
@@ -85,7 +91,7 @@ Os dados vêm do [Hermes](https://hermes-agent.nousresearch.com/docs). Sem ele i
 - **Salas e agentes:** em `layout.json` você define as salas e quem senta em cada uma, por nome ou por prefixo (por exemplo, todo `consulta_*` vai para CONSULTAS), e os nomes amigáveis de cada estação.
 - **Rotinas com prazo:** os jobs agendados já trazem a própria agenda. Para um agente que deve rodar com certa frequência, acrescente `"cadencia_h": 24` na entrada dele (e `"cadencia_dias_uteis": true` para não contar o fim de semana): passou de 1,2× esse intervalo sem rodar, ele aparece como atrasado.
 - **Integrações:** a fila da equipe no Agidesk e a contagem de notas de um vault do Obsidian são configuradas num arquivo local (veja `config.exemplo.json`). A chave de acesso fica no Keychain do macOS, nunca no código.
-- **Para uma TV:** abra `/?tema=tv` em tela cheia. Se a TV não tiver teclado nem mouse, inicie o Chrome com `--autoplay-policy=no-user-gesture-required` para o som tocar sem precisar de clique.
+- **Para uma TV:** abra `/?tema=tv` (ou `/?tema=pixeltv`, em pixel art) em tela cheia; `&sala=<id da sala>` abre já aproximado numa sala. Se a TV não tiver teclado nem mouse, inicie o Chrome com `--autoplay-policy=no-user-gesture-required` para o som tocar sem precisar de clique.
 
 ## Privacidade e segurança
 
@@ -99,7 +105,7 @@ Os dados vêm do [Hermes](https://hermes-agent.nousresearch.com/docs). Sem ele i
 Dois níveis de teste acompanham o projeto:
 
 - `python3 testes_servidor.py`: em cerca de um segundo, confere a lógica do servidor com dados fictícios (estados, atraso, início e fim de execução, consumo, privacidade da equipe e as travas de segurança). Roda também no GitHub a cada envio, em Python 3.9 e 3.13.
-- `python3 testar_sala.py`: abre a página num navegador em vários cenários (dados reais, demonstração, Modo TV, 3D, atrasos, agentes novos e falhas) e reprova qualquer rótulo sobreposto, objeto fora do lugar, erro de script ou dado individual da equipe.
+- `python3 testar_sala.py`: abre a página num navegador em vários cenários (dados reais, demonstração, Modo TV, 3D, pixel art, a pasta entre salas, atrasos, agentes novos e falhas) e reprova qualquer rótulo sobreposto, objeto fora do lugar, erro de script ou dado individual da equipe.
 
 ## Feito com
 

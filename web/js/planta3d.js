@@ -306,6 +306,7 @@ function t3Boneco(w){
     bx(t3h(4),t3v(13),t3h(4.4),IM?MET:tech?'#2B3542':jk,0,-t3v(6.5),0,a); bx(t3h(3.4),t3v(3),t3h(3.6),IM?JUN:skin,0,-t3v(14),0,a); if(IM)bx(t3h(5),t3v(3.6),t3h(5),JUN,0,-t3v(.6),0,a); return a};
   const bL=braco(-1), bR=braco(1);
   const tablet=bx(t3h(13),t3v(1),t3h(9),'#0A1118',0,t3v(9),prof/2+t3h(5),tronco); tablet.visible=false;
+  const pasta=bx(t3h(13),t3v(10),t3h(2),'#C9D3DD',0,t3v(9),prof/2+t3h(2.5),tronco); pasta.visible=false;   // pasta entre salas
   // cabeça
   const cab=new THREE.Group(); cab.position.set(0,t3v(19),0); tronco.add(cab);
   const hw=t3h(12.6), hh=t3v(12.6), hd=t3h(11.5);
@@ -319,7 +320,7 @@ function t3Boneco(w){
     [-1,1].forEach(s=>{bx(t3h(1.9),t3v(1.9),.01,'#10151C',s*t3h(2.1),hh*.48,hd/2+.004,cab);
       if(oc){const ar=new THREE.Mesh(new THREE.TorusGeometry(t3h(2),t3h(.35),4,12),mat('#10151C'));ar.position.set(s*t3h(2.4),hh*.48,hd/2+.01);cab.add(ar)}});
   }
-  return {g,corpo,tronco,cab,pL,pR,bL,bR,tablet,crach,ang:null,px:null,py:null};
+  return {g,corpo,tronco,cab,pL,pR,bL,bR,tablet,pasta,crach,ang:null,px:null,py:null};
 }
 const T3ESTCOR={running:'#2BD4F2',ok:'#7ED68B',error:'#F25C60',stuck:'#F2A93B',idle:'#5B6B7C'};
 function t3Estado(el){if(!el)return 'idle';const c=el.classList;return c.contains('error')?'error':(c.contains('stuck')||c.contains('late'))?'stuck':c.contains('running')?'running':c.contains('ok')?'ok':'idle'}
@@ -351,7 +352,7 @@ function t3Pose(w,b,t){
   else{b.bL.rotation.x=-armL*rad;b.bR.rotation.x=armR*rad}
   b.bL.rotation.z=0; b.bR.rotation.z=0;
   b.tronco.rotation.x=lean*rad; b.cab.rotation.z=tilt*rad*.5;
-  b.tablet.visible=m==='read';
+  b.tablet.visible=m==='read'; b.pasta.visible=!!w.carry;
   // direção: andando = para onde vai; parado = de três quartos para a câmera, como o boneco da planta (0 = de frente; -1 = virado para a esquerda da tela; 1 = para a direita)
   let ang=b.ang;
   if(b.px!=null){const dx=w.x-b.px,dy=w.y-b.py;if(Math.hypot(dx,dy)>.002)ang=Math.atan2(dx,dy)}

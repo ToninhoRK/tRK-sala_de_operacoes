@@ -1,17 +1,20 @@
 /* Sala de Operações · Preferências de exibição e temas.
    Guardadas no navegador (localStorage "sala_cfg"); a URL tem prioridade e não grava (?tema=tv&anim=reduzida&rotulos=problemas),
    para a TV abrir sempre do mesmo jeito. O servidor continua só leitura: nada disto sai do navegador.
-   Temas: "planta" (padrão), "tv" (mesma planta, legível de longe, sem painel lateral) e "3d" (a mesma planta em 3D de
-   verdade, planta3d.js). Trocar para o 3D ou sair dele recarrega a página (o 3D anota a montagem da planta). */
+   Temas: "planta" (padrão), "tv" (mesma planta, legível de longe, sem painel lateral), "3d" (a mesma planta em 3D de
+   verdade, planta3d.js) e "pixel" (a mesma planta em pixel art, planta_pixel.js). Trocar para o 3D ou o pixel art, ou sair
+   deles, recarrega a página (os dois acompanham a montagem da planta). */
+// temas que ligam o Modo TV e o pixel art ("pixeltv" = os dois juntos)
+const temaTV=t=>t==='tv'||t==='pixeltv', temaPX=t=>t==='pixel'||t==='pixeltv';
 const CFG_PADRAO={tema:'planta',anim:'completa',rotulos:'todos',nomes:'amigaveis'};
 const CFG_OPCOES={
-  tema:{planta:'Planta isométrica',tv:'Modo TV','3d':'3D'},
+  tema:{planta:'Planta isométrica',tv:'Modo TV','3d':'3D',pixel:'Pixel art',pixeltv:'Pixel art · Modo TV'},
   anim:{completa:'Completa',reduzida:'Reduzida',desligada:'Desligada'},
   rotulos:{todos:'Todos',ativos:'Nomes + rodando e falha',problemas:'Só rodando e falha',nenhum:'Nenhum'},
   nomes:{amigaveis:'Amigáveis',tecnicos:'Técnicos (id do agente)'},
 };
 const CFG_AJUDA={
-  tema:'Modo TV: sem o painel lateral, números e rótulos maiores, cursor some parado. 3D: a mesma planta em 3D de verdade (luz, sombra, volume), mesmo ângulo e rótulos.',
+  tema:'Modo TV: sem o painel lateral, números e rótulos maiores, cursor some parado. 3D: a mesma planta em 3D de verdade (luz, sombra, volume), mesmo ângulo e rótulos. Pixel art: a mesma planta desenhada em pixels (aproxime com a roda do mouse ou clicando na placa da sala); "Pixel art · Modo TV" junta os dois.',
   anim:'Reduzida: bonecos a 15 quadros/s e sem os pulsos decorativos (melhor para TV ou computador fraco). Desligada: ninguém anda; cada boneco fica parado onde o estado manda.',
   nomes:'Amigáveis: os nomes do campo "nomes" do layout.json (ex.: Consulta AD). Técnicos: o id do agente, como no agentes.json e nos logs.',
   rotulos:'Nomes + rodando e falha: todos os nomes, mas a linha de estado só em quem está rodando ou em falha (some o "ÚLT. dd/mm"). Só rodando e falha esconde também o nome das estações OK e sem histórico (a cor do selo continua).',
@@ -23,14 +26,14 @@ const CFG=(()=>{let c={};try{c=JSON.parse(localStorage.getItem('sala_cfg')||'{}'
 function cfgSalvar(){const g={};for(const k in CFG_PADRAO)g[k]=CFG[k];try{localStorage.setItem('sala_cfg',JSON.stringify(g))}catch(e){}}
 function cfgAplicar(){
   const b=document.body;
-  b.classList.toggle('tv',CFG.tema==='tv');
+  b.classList.toggle('tv',temaTV(CFG.tema));
   ['reduzida','desligada'].forEach(a=>b.classList.toggle('anim-'+a,CFG.anim===a));
   {const f=document.getElementById('k-fps'); if(f)f.textContent=CFG.anim==='desligada'?'animação desligada':'medindo fps…'}   // o número vem do laço, a cada segundo
   ['ativos','problemas','nenhum'].forEach(r=>b.classList.toggle('rot-'+r,CFG.rotulos===r));
   if(typeof cfgMenuSync==='function')cfgMenuSync();
 }
 function cfgMudar(k,v){
-  if(k==='tema'&&(v==='3d')!==(CFG.tema==='3d')){CFG[k]=v;cfgSalvar();const u=new URLSearchParams(location.search);u.delete('tema');location.search=u.toString();if(!u.toString())location.reload();return}   // entrar ou sair do 3D: recarrega
+  if(k==='tema'&&((v==='3d')!==(CFG.tema==='3d')||temaPX(v)!==temaPX(CFG.tema))){CFG[k]=v;cfgSalvar();const u=new URLSearchParams(location.search);u.delete('tema');location.search=u.toString();if(!u.toString())location.reload();return}   // entrar ou sair do 3D ou do pixel art: recarrega
   if(k==='nomes'){CFG[k]=v;cfgSalvar();location.reload();return}      // os rótulos da planta são montados uma vez: recarrega
   const animAntes=CFG.anim; CFG[k]=v; cfgSalvar(); cfgAplicar();
   if(k==='anim'&&built){ if(v==='desligada')parado(); else if(animAntes==='desligada')Object.values(WORKERS).forEach(w=>{w.timer=rr(1,4)}) }
@@ -38,7 +41,7 @@ function cfgMudar(k,v){
 // animação desligada: cada boneco vai direto para onde o estado manda (rodando = mesa; falha = de pé ao lado; demais = onde está)
 function parado(){
   if(!built)return;
-  Object.values(WORKERS).forEach(w=>{const want=desired(w)||w.dest||w.at; w.path=[]; w.dest=null; w.at=want; w.x=want.pos[0]; w.y=want.pos[1]; w.face=want.face; w.run=0; w.status=w.st.it.status; renderWorker(w,SIMT)});
+  Object.values(WORKERS).forEach(w=>{const want=desired(w)||w.dest||w.at; w.path=[]; w.carry=false; w.pastaPend=null; w.dest=null; w.at=want; w.x=want.pos[0]; w.y=want.pos[1]; w.face=want.face; w.run=0; w.status=w.st.it.status; renderWorker(w,SIMT)});
   sortWorld();
 }
 // menu CONFIGURAR (cabeçalho)

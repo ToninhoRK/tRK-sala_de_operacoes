@@ -30,6 +30,7 @@ function setStatusClass(g,status){
   g.setAttribute('class',[isWk?'wk':'st',status,...extra].join(' '));
 }
 function update(s){
+  const antes={}; Object.values(STATIONS).forEach(st=>{antes[st.id]=st.it&&st.it.status});   // para a pasta entre salas
   STATE=s; s._t=Date.now();
   all().forEach(it=>{
     if(STATIONS[it.id])STATIONS[it.id].it=it;
@@ -38,6 +39,7 @@ function update(s){
     document.querySelectorAll('.st[data-id="'+it.id+'"], .wk[data-id="'+it.id+'"]').forEach(g=>{setStatusClass(g,it.status);g.classList.toggle('late',late);g.classList.toggle('velho',!!it.antigo&&!late);g.classList.toggle('stuck',it.status==='running'&&it.sem_acao_s>=300)});
   });
   if(SEL)select(SEL);
+  if(built)pastasChecar(antes);
   tick();
   document.querySelectorAll('.flow').forEach(f=>{const it=all().find(x=>x.id===f.dataset.src);f.classList.toggle('on',!!it&&it.status==='running')});
   const k=s.kpis, ver=veredito(s), num=(id,v,cls)=>{const e=$(id);e.textContent=v;e.className=v?cls:'z'};   // zero apagado: só número diferente de zero chama atenção
@@ -178,7 +180,7 @@ function renderDetail(){
 }
 /* Modo TV: coluna "AGORA" em letra grande, só com o que importa de longe (falha, sem ação, rodando) e os totais */
 function renderTV(){
-  if(CFG.tema!=='tv'||!STATE)return;
+  if(!temaTV(CFG.tema)||!STATE)return;
   const el0=(Date.now()-STATE._t)/1000, f=v=>v==null?'—':v;
   const L=[...STATE.agents,...STATE.crons].map(it=>{
     let o=null;
