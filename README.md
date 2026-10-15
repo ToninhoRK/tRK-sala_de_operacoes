@@ -1,4 +1,4 @@
-# Sala de Operações
+# Sala de Operações - Monitoramento de Agentes de I.A.
 
 Painel local, em visão isométrica, que mostra o estado de agentes de I.A. do [Hermes](https://hermes-agent.nousresearch.com/docs), dos jobs agendados (cron) e, opcionalmente, da fila de chamados de uma equipe no Agidesk. Cada agente é um boneco numa sala; o estado real (rodando, ok, erro) define o que ele faz.
 
