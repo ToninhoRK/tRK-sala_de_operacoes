@@ -128,7 +128,7 @@ function tick(){
 }
 let LASTFEED='';
 function renderFeed(s){
-  const fj=JSON.stringify(s.feed); if(fj===LASTFEED)return; LASTFEED=fj;
+  const fj=FEEDF+'|'+JSON.stringify(s.feed); if(fj===LASTFEED)return; LASTFEED=fj;   // o filtro entra na chave: sem ele, TUDO/SÓ EXCEÇÕES não redesenhava (bug de 16/10/2026)
   const nrun=s.feed.filter(e=>e.running).length; $('feedn').textContent=(s.feed.length-nrun)+' concluídos'+(nrun?' + '+nrun+' em execução':'');
   // execuções OK seguidas do mesmo agente/job viram uma linha só ("×6 · desde 09:00"); o selo só aparece na exceção (executando, erro, fallback); OK = ponto verde
   const fonte=FEEDF==='excecoes'?s.feed.filter(e=>e.running||e.code!==0||e.fallback):s.feed;

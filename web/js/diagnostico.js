@@ -68,8 +68,24 @@ function lateralAutoteste(){
   select(antes);
   return ruins.length?['painel lateral: atividade recente espremida ('+innerWidth+'x'+innerHeight+') com '+ruins.slice(0,6).join(', ')+(ruins.length>6?' e mais '+(ruins.length-6):'')]:[];
 }
+// Filtro da atividade recente: clicar em SÓ EXCEÇÕES deixa só exceções (nenhum ponto verde de OK) e marca o botão; TUDO volta a lista inteira.
+function feedAutoteste(){
+  const bE=document.querySelector('#feedf button[data-f="excecoes"]'), bT=document.querySelector('#feedf button[data-f="tudo"]'), fw=document.getElementById('feedwrap');
+  if(!bE||!bT||!fw||!STATE||!(STATE.feed||[]).length)return [];
+  const antes=FEEDF, guardado=(()=>{try{return localStorage.getItem('sala_feed')}catch(e){return null}})(), r=[];
+  bT.click(); const nTudo=fw.querySelectorAll('.okp').length;
+  bE.click();
+  if(bE.getAttribute('aria-pressed')!=='true')r.push('filtro SÓ EXCEÇÕES: o botão não ficou marcado');
+  if(fw.querySelectorAll('.okp').length)r.push('filtro SÓ EXCEÇÕES: a lista continuou com execuções OK ('+fw.querySelectorAll('.okp').length+' de '+nTudo+')');
+  bT.click();
+  if(nTudo&&!fw.querySelectorAll('.okp').length)r.push('filtro TUDO: as execuções OK não voltaram');
+  (antes==='excecoes'?bE:bT).click();
+  try{guardado==null?localStorage.removeItem('sala_feed'):localStorage.setItem('sala_feed',guardado)}catch(e){}
+  return r;
+}
 function debugReport(){
   csvAutoteste().forEach(errPush);
+  feedAutoteste().forEach(errPush);
   lateralAutoteste().forEach(errPush);
   const R=(b,k,id,t)=>({k,x:b.x,y:b.y,w:b.width,h:b.height,id,t});
   const A=[];
