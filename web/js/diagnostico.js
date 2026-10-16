@@ -59,8 +59,18 @@ function csvAutoteste(){
   if(!f.startsWith('"\'=1+1;x"'))r.push('csv: texto com = não foi protegido: '+f.slice(0,20));
   return r;
 }
+// Painel lateral: com cada estação selecionada, a atividade recente continua legível (mín. 160 px). Só quando o painel aparece ao lado da planta.
+function lateralAutoteste(){
+  const fw=document.getElementById('feedwrap'), lat=document.getElementById('lateral');
+  if(!fw||!lat||!lat.offsetParent||innerWidth<=1000||!STATE)return [];
+  const antes=SEL, ruins=[];
+  for(const it of (STATE.agents||[]).concat(STATE.crons||[])){select(it.id);const h=fw.getBoundingClientRect().height;if(h<160)ruins.push(it.id+' '+Math.round(h)+'px')}
+  select(antes);
+  return ruins.length?['painel lateral: atividade recente espremida ('+innerWidth+'x'+innerHeight+') com '+ruins.slice(0,6).join(', ')+(ruins.length>6?' e mais '+(ruins.length-6):'')]:[];
+}
 function debugReport(){
   csvAutoteste().forEach(errPush);
+  lateralAutoteste().forEach(errPush);
   const R=(b,k,id,t)=>({k,x:b.x,y:b.y,w:b.width,h:b.height,id,t});
   const A=[];
   document.querySelectorAll('.lb').forEach(g=>{const id=g.dataset.id;g.querySelectorAll('text').forEach(t=>A.push(R(t.getBBox(),'label '+id,id,'label')))});

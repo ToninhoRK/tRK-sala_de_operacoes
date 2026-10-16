@@ -142,6 +142,9 @@ function renderFeed(s){
     return `<div class="row${ok?' okr':''}" data-id="${esc(e.agent)}" title="Clique para selecionar a estação"><span class="t">${fmtTs(e.ts)}</span><span class="n">${esc(label(e.agent))}${n>1?' <b class="xn">×'+n+'</b>':''}<small>${esc(sub)}</small></span>${chip}</div>`;
   }).join('')||(FEEDF==='excecoes'?'<div class="empty" style="padding:4px 18px">Nenhuma exceção (erro, fallback ou execução em andamento) nas últimas execuções.</div>':'')||'<div class="empty" style="padding:18px">Nenhuma atividade registrada.</div>';
 }
+// Detalhe da estação maior que o espaço: marca .mais (texto se apaga na borda de baixo) até a rolagem chegar ao fim.
+function marcarRolagem(){const d=document.getElementById('detail');if(d)d.classList.toggle('mais',d.scrollTop+d.clientHeight<d.scrollHeight-4)}
+document.addEventListener('DOMContentLoaded',()=>{const d=document.getElementById('detail');if(d)d.addEventListener('scroll',marcarRolagem,{passive:true});addEventListener('resize',marcarRolagem)});
 function renderDetail(){
   const d=$('detail'); const it=all().find(x=>x.id===SEL); if(!it)return;
   let rows=''; const add=(k,v)=>rows+=`<dt>${k}</dt><dd>${v}</dd>`;
@@ -185,6 +188,7 @@ function renderDetail(){
   d.innerHTML=`<h2>Estação <span>${it.kind==='cron'?'AGENDADOR':(it.kind==='jarvis'?'HERMES PRINCIPAL':(it.kind==='equipe'?'EQUIPE AGIDESK':'AGENTE'))}</span></h2>
     <div class="nm">${esc(it.kind==='equipe'?it.name:label(it.id))} <span class="chip ${it.status}">${(it.kind==='jarvis'?JSTL:STL)[it.status]}</span></div>
     <div class="ds">${esc(it.desc)}</div><dl>${rows}</dl>${it.kind==='equipe'?'<div class="ds" style="margin-top:8px">Só totais da equipe: a Sala não mostra números por pessoa.</div>':''}${rec?'<h2 style="margin:14px 0 4px">Últimas execuções</h2>'+rec:''}`;
+  marcarRolagem();
 }
 // período maior que o histórico disponível: diz desde quando há dados (jobs: a Sala guarda o histórico desde a instalação do vigia)
 function desdeTxt(it,P){const d=it.historico_desde;if(!d)return '';const ini=new Date(Date.now()-(P-1)*864e5);ini.setHours(0,0,0,0);

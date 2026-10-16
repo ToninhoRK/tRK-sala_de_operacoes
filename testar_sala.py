@@ -48,9 +48,9 @@ def subir(env_extra):
 FPS = {}
 
 
-def pagina(porta, consulta, perfil):
+def pagina(porta, consulta, perfil, janela="1920,1080"):
     out = subprocess.run([CHROME] + CHROME_EXTRA + ["--headless=new", "--disable-gpu", "--no-first-run", "--user-data-dir=" + perfil,
-                          "--window-size=1920,1080", "--virtual-time-budget=30000", "--dump-dom",
+                          "--window-size=" + janela, "--virtual-time-budget=30000", "--dump-dom",
                           "http://127.0.0.1:%d/?%s" % (porta, consulta)], capture_output=True, text=True, timeout=240,
                          env=dict(os.environ, HOME=pwd.getpwuid(os.getuid()).pw_dir)).stdout   # Chrome sempre com o HOME real: com HOME vazio (teste "sem Hermes") ele trava ao abrir; o "sem Hermes" vale só para o servidor
     m = re.search(r'<pre id="dbg">(OVERLAPS .*?)</pre>', out, re.S)   # o relatório começa sempre por OVERLAPS (o código da página vem embutido no HTML)
@@ -226,6 +226,10 @@ def main():
             casos.append(("manutenção + 90 dias + lista e CSV", "debug=1&demo=1&manut=1&periodo=90&lista=1&seed=9&ff=%s" % ff))
             for nome, q in casos:
                 linhas.append((nome,) + _rodar(porta, q, perfil, falhas, nome))
+            nome = "tela de notebook 1440x900 · painel lateral"     # atividade recente espremida pelo detalhe (bug de 16/10/2026)
+            linhas.append((nome,) + _rodar(porta, "debug=1&seed=2&ff=60", perfil, falhas, nome, "1440,900"))
+            nome = "tela de notebook 1440x900 · demonstração"
+            linhas.append((nome,) + _rodar(porta, "debug=1&demo=1&seed=4&ff=60", perfil, falhas, nome, "1440,900"))
             falhas += teste_3d(porta, perfil)
             falhas += teste_pixel(porta, perfil)
         finally:
@@ -263,8 +267,8 @@ def main():
     return 0
 
 
-def _rodar(porta, q, perfil, falhas, nome):
-    vals, det = pagina(porta, q, perfil)
+def _rodar(porta, q, perfil, falhas, nome, janela="1920,1080"):
+    vals, det = pagina(porta, q, perfil, janela)
     if vals is None:
         falhas.append("%s: %s" % (nome, det)); return (tuple([None] * len(CONTADORES)),)
     ruins = [c for c in CONTADORES if vals[c] != 0]

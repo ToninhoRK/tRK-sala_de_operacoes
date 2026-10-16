@@ -46,7 +46,12 @@ dl{display:grid;grid-template-columns:118px 1fr;gap:6px 10px;margin:0;font-size:
 dt{color:var(--muted);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding-top:2px}
 dd{margin:0;font-family:var(--mono);font-size:12px;word-break:break-word}
 .empty{color:var(--dim);font-family:var(--mono);font-size:12px;line-height:1.6}
-#feedwrap{flex:1;min-height:0;overflow:auto}
+#feedwrap{flex:1;min-height:200px;overflow:auto}
+/* detalhe longo (agente com histórico, agenda, pós-validação) rola sozinho: a atividade recente nunca fica sem espaço (bug de 16/10/2026: 21 px em tela 1440x900) */
+aside#lateral>#detail{flex:0 1 auto;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+/* há mais conteúdo embaixo (classe posta por marcarRolagem): o texto se apaga na borda; no Mac a barra de rolagem fica escondida
+   e sombra escura não aparece no fundo quase preto do painel */
+aside#lateral>#detail.mais{-webkit-mask-image:linear-gradient(#000 calc(100% - 44px),transparent);mask-image:linear-gradient(#000 calc(100% - 44px),transparent)}
 .row{display:grid;grid-template-columns:62px 1fr auto;gap:10px;align-items:center;padding:8px 18px;border-bottom:1px solid #121b25;font-size:12px}
 .row{cursor:pointer}.row:hover{background:var(--panel2)}
 .plq{cursor:zoom-in}.plq:hover .plaque{stroke:#2BD4F2}
