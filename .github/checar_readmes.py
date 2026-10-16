@@ -1,6 +1,6 @@
 """Confere que o README em português e a versão em inglês continuam iguais na estrutura.
 
-Compara, na ordem: níveis dos títulos, capturas (caminho das imagens), blocos de código, linhas de tabela e links
+Compara, na ordem: níveis dos títulos, capturas (caminho das imagens; as do inglês ficam em docs/en/), blocos de código, linhas de tabela e links
 para arquivos do repositório. Confere também que cada link do sumário (#âncora) leva a um título que existe e que
 cada versão aponta para a outra. Uso: python3 .github/checar_readmes.py (sai com código 1 se algo divergir).
 Checks that README.md (Portuguese) and README.en.md (English) keep the same structure; exits 1 on any drift.
@@ -39,6 +39,15 @@ def main():
     v = {n: ler(n) for n in VERSOES}
     erros = []
     a, b = v["README.md"], v["README.en.md"]
+    en = lambda xs: [x.replace("docs/en/", "docs/", 1) for x in xs]             # capturas em inglês: mesma imagem em docs/en/
+    b = dict(b, imagens=en(b["imagens"]), arquivos=sorted(en(b["arquivos"])))
+    for i in v["README.en.md"]["imagens"]:
+        if i.startswith("docs/") and not i.startswith("docs/en/"):
+            erros.append("README.en.md: captura em português (%s): use a de docs/en/" % i)
+    for nome, d in v.items():
+        for i in d["imagens"]:
+            if not i.startswith("http") and not os.path.exists(os.path.join(RAIZ, i)):
+                erros.append("%s: captura que não existe: %s" % (nome, i))
     for chave, nome in (("titulos", "títulos (nível e quantidade)"), ("imagens", "capturas"), ("codigo", "blocos de código"),
                         ("tabela", "linhas de tabela"), ("arquivos", "links para arquivos do repositório")):
         if a[chave] != b[chave]:

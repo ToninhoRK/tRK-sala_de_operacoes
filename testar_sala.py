@@ -49,6 +49,8 @@ FPS = {}
 
 
 def pagina(porta, consulta, perfil, janela="1920,1080"):
+    if "lang=" not in consulta:
+        consulta += "&lang=pt"     # a língua segue o navegador (o Chrome de teste pode estar em inglês): sem lang=, testa o português
     out = subprocess.run([CHROME] + CHROME_EXTRA + ["--headless=new", "--disable-gpu", "--no-first-run", "--user-data-dir=" + perfil,
                           "--window-size=" + janela, "--virtual-time-budget=30000", "--dump-dom",
                           "http://127.0.0.1:%d/?%s" % (porta, consulta)], capture_output=True, text=True, timeout=240,
@@ -153,8 +155,8 @@ def teste_3d(porta, perfil):
     b = (v.get("BONECOS") or "0 DE ?").split(" DE ")
     if b[0] != b[-1] or b[0] == "0": erros.append("3D: bonecos %s" % v.get("BONECOS"))
     if int(v.get("DECALS") or 0) < 3: erros.append("3D: objetos de parede não viraram textura (%s)" % v.get("DECALS"))
-    s = re.match(r"ok com (\d+)/\S* sem (\d+)/", v.get("SOMBRA") or "")
-    sombra = bool(s) and int(s.group(1)) < .85 * int(s.group(2))
+    s = re.match(r"ok com (\S+) sem (\S+)", v.get("SOMBRA") or "")   # 5 pontos do piso em volta do 1º rack: algum tem de escurecer
+    sombra = bool(s) and any(int(c) < .85 * int(x) for c, x in zip(s.group(1).split("/"), s.group(2).split("/")) if int(x) > 0)
     if not sombra: erros.append("3D: a sombra não aparece no piso (%s)" % v.get("SOMBRA"))
     if v.get("ERROS") != "0": erros.append("3D: erros de script: " + m.group(1)[-400:])
     d = re.search(r'<pre id="dbg">(OVERLAPS .*?)</pre>', out, re.S)
@@ -228,8 +230,20 @@ def main():
                 linhas.append((nome,) + _rodar(porta, q, perfil, falhas, nome))
             nome = "tela de notebook 1440x900 · painel lateral"     # atividade recente espremida pelo detalhe (bug de 16/10/2026)
             linhas.append((nome,) + _rodar(porta, "debug=1&seed=2&ff=60", perfil, falhas, nome, "1440,900"))
+            for nome, q, jan in (("JOBS · dados atuais", "debug=1&jobs=1&seed=2&ff=60", "1920,1080"),
+                                 ("JOBS · demonstração · 90 dias", "debug=1&jobs=1&demo=1&periodo=90&seed=3&ff=60", "1920,1080"),
+                                 ("JOBS · tela de notebook 1440x900 · 30 dias", "debug=1&jobs=1&periodo=30&seed=4&ff=60", "1440,900")):
+                linhas.append((nome,) + _rodar(porta, q, perfil, falhas, nome, jan))
             nome = "tela de notebook 1440x900 · demonstração"
             linhas.append((nome,) + _rodar(porta, "debug=1&demo=1&seed=4&ff=60", perfil, falhas, nome, "1440,900"))
+            # tela em inglês (16/10/2026): o diagnóstico procura texto em português que sobrou (IDIOMA: ... conta em ERROS)
+            for nome, q, jan in (("inglês · dados atuais", "debug=1&lang=en&seed=2&ff=%s" % ff, "1920,1080"),
+                                 ("inglês · demonstração · manutenção + atrasado + sem ação", "debug=1&lang=en&demo=1&manut=1&atrasado=1&travado=1&seed=4&ff=%s" % ff, "1920,1080"),
+                                 ("inglês · Modo TV · demonstração", "debug=1&lang=en&tema=tv&demo=1&atrasado=1&seed=7&ff=%s" % ff, "1920,1080"),
+                                 ("inglês · lista · 30 dias · animação desligada", "debug=1&lang=en&lista=1&demo=1&periodo=30&anim=desligada&seed=5&ff=60", "1920,1080"),
+                                 ("inglês · JOBS · notebook 1440x900 · 30 dias", "debug=1&lang=en&jobs=1&demo=1&periodo=30&seed=4&ff=60", "1440,900")):
+                linhas.append((nome,) + _rodar(porta, q, perfil, falhas, nome, jan))
+            falhas += teste_idioma(porta, perfil)
             falhas += teste_3d(porta, perfil)
             falhas += teste_pixel(porta, perfil)
         finally:
@@ -267,13 +281,30 @@ def main():
     return 0
 
 
+def teste_idioma(porta, perfil):
+    """Sem ?lang=, a língua vem do navegador: português fica em português; inglês e qualquer outra língua, inglês."""
+    falhas = []
+    for lang, esp in (("pt-BR", "pt-BR"), ("pt-PT", "pt-BR"), ("en-US", "en"), ("fr-FR", "en"), ("es-ES", "en")):
+        out = subprocess.run([CHROME] + CHROME_EXTRA + ["--headless=new", "--disable-gpu", "--no-first-run", "--lang=" + lang, "--accept-lang=" + lang,   # no Mac, só --accept-lang muda o navigator.language do headless
+                              "--user-data-dir=" + perfil + "lang" + lang, "--window-size=1280,800", "--virtual-time-budget=6000",
+                              "--dump-dom", "http://127.0.0.1:%d/" % porta], capture_output=True, text=True, timeout=120,
+                             env=dict(os.environ, HOME=pwd.getpwuid(os.getuid()).pw_dir)).stdout
+        m = re.search(r'<html lang="([^"]+)"', out)
+        rot = re.search(r'id="k-err"', out) and re.search(r'<label data-en="Failures today">([^<]*)</label>', out)
+        if not m or m.group(1) != esp:
+            falhas.append("idioma: navegador em %s abriu a página em %s (esperado %s)" % (lang, m and m.group(1), esp))
+        elif rot and rot.group(1) != ("Falhas hoje" if esp == "pt-BR" else "Failures today"):
+            falhas.append("idioma: navegador em %s, mas o card mostra %r" % (lang, rot.group(1)))
+    return falhas
+
+
 def _rodar(porta, q, perfil, falhas, nome, janela="1920,1080"):
     vals, det = pagina(porta, q, perfil, janela)
     if vals is None:
         falhas.append("%s: %s" % (nome, det)); return (tuple([None] * len(CONTADORES)),)
     ruins = [c for c in CONTADORES if vals[c] != 0]
-    fps = FPS.get(q)
-    esperado = r"^animação desligada$" if "anim=desligada" in q else r"^(\d+ fps( · reduzida)?|medindo fps…)$"   # sob tempo virtual o relógio não anda: o número real é medido em fps_real()
+    fps = FPS.get(q if "lang=" in q else q + "&lang=pt")
+    esperado = r"^(animação desligada|animation off)$" if "anim=desligada" in q else r"^(\d+ fps( · reduzida| · reduced)?|medindo fps…|measuring fps…)$"   # sob tempo virtual o relógio não anda: o número real é medido em fps_real()
     if fps is None or not re.match(esperado, fps):
         falhas.append("%s: fps do card Operação fora do formato: %r" % (nome, fps))
     if ruins:

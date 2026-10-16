@@ -50,11 +50,11 @@ function probe(){
 // exportação CSV (?debug=1): linhas = estações + cabeçalho, mesmo número de colunas em todas, coluna de sucesso e proteção contra fórmula
 function csvAutoteste(){
   if(!STATE||typeof csvLista!=='function')return ['csv: sem estado ou sem csvLista'];
-  const r=[], nc=l=>{let n=1,q=false;for(const ch of l){if(ch==='"')q=!q;else if(ch===';'&&!q)n++}return n};
+  const SEP=EN?',':';', r=[], nc=l=>{let n=1,q=false;for(const ch of l){if(ch==='"')q=!q;else if(ch===SEP&&!q)n++}return n};
   const L=csvLista(STATE).replace(/^\ufeff/,'').split('\r\n').filter(Boolean), esp=1+STATE.agents.length+STATE.crons.length;
   if(L.length!==esp)r.push('csv: '+L.length+' linhas (esperado '+esp+')');
   L.forEach((l,i)=>{if(nc(l)!==nc(L[0]))r.push('csv: linha '+i+' com '+nc(l)+' colunas (cabeçalho '+nc(L[0])+')')});
-  if(!new RegExp('Sucesso em '+(STATE.periodo_dias||7)+' d').test(L[0]))r.push('csv: sem a coluna de sucesso do período');
+  if(!new RegExp(T('Sucesso em ','Success in ')+(STATE.periodo_dias||7)+' d').test(L[0]))r.push('csv: sem a coluna de sucesso do período');
   const f=csvLista(Object.assign({},STATE,{agents:[Object.assign({},STATE.agents[0],{id:'=1+1;x'})],crons:[]})).split('\r\n')[1]||'';
   if(!f.startsWith('"\'=1+1;x"'))r.push('csv: texto com = não foi protegido: '+f.slice(0,20));
   return r;
@@ -83,7 +83,61 @@ function feedAutoteste(){
   try{guardado==null?localStorage.removeItem('sala_feed'):localStorage.setItem('sala_feed',guardado)}catch(e){}
   return r;
 }
+// Tela JOBS: liga a tela, confere os 4 blocos, uma linha por job (tabela, grade e quadro dos 7 dias), P quadradinhos por linha,
+// nada passando da largura, datas do eixo sem sobreposição, ordenação e CSV; volta para a visão que estava.
+function jobsAutoteste(){
+  const J=document.getElementById('jobs');
+  if(!J||!STATE||!(STATE.crons||[]).length||typeof visaoLigar!=='function'||document.body.classList.contains('tv'))return [];   // Modo TV: sem a chave de visões (a TV mostra sempre a planta)
+  const antes=VISAO, guard=(()=>{try{return localStorage.getItem('sala_visao')}catch(e){return null}})(), sort=JSORT, r=[];
+  const n=STATE.crons.length, P=STATE.periodo_dias||7;
+  visaoLigar('jobs');
+  if(getComputedStyle(J).display==='none')r.push('JOBS: a tela não apareceu');
+  ['jb-kpi','jb-prox','jb-hist','jb-tab'].forEach(id=>{if(!document.getElementById(id))r.push('JOBS: bloco '+id+' ausente')});
+  const nt=J.querySelectorAll('.jtab tbody tr').length, ng=J.querySelectorAll('.jgrade .jlin:not(.eixo)').length, ns=J.querySelectorAll('.jsem tbody tr').length;
+  if(nt!==n||ng!==n||ns!==n)r.push('JOBS: '+n+' jobs, mas tabela '+nt+', grade '+ng+', próximas '+ns);
+  J.querySelectorAll('.jgrade .jlin').forEach(l=>{const q=l.querySelectorAll(l.classList.contains('eixo')?'em':'i').length;if(q!==P)r.push('JOBS: grade com '+q+' dias em '+(l.dataset.id||'eixo')+' (esperado '+P+')')});
+  if(J.scrollWidth>J.clientWidth+2)r.push('JOBS: a tela passa da largura ('+J.scrollWidth+' px > '+J.clientWidth+' px, '+innerWidth+'x'+innerHeight+')');
+  if(innerWidth>=1400)J.querySelectorAll('.jrolar').forEach(w=>{if(w.scrollWidth>w.clientWidth+2)r.push('JOBS: tabela com rolagem lateral em tela de '+innerWidth+' px ('+w.scrollWidth+' > '+w.clientWidth+')')});
+  const E=[...J.querySelectorAll('.jlin.eixo em')].filter(e=>e.textContent).map(e=>{const R=document.createRange();R.selectNodeContents(e);return R.getBoundingClientRect()});
+  for(let i=1;i<E.length;i++)if(E[i].left<E[i-1].right-0.5){r.push('JOBS: datas do eixo da grade sobrepostas ('+innerWidth+'x'+innerHeight+')');break}
+  const b=J.querySelector('.jtab th button[data-k="nome"]');
+  if(b){b.click();const a1=[...J.querySelectorAll('.jtab td.nm')].map(t=>t.textContent);J.querySelector('.jtab th button[data-k="nome"]').click();const a2=[...J.querySelectorAll('.jtab td.nm')].map(t=>t.textContent);
+    const o=[...a1].sort((x,y)=>x.localeCompare(y,LOCALE)).join('|'), oi=[...a1].sort((x,y)=>y.localeCompare(x,LOCALE)).join('|');   // os dois cliques: uma ordem e a oposta
+    if(!((a1.join('|')===o&&a2.join('|')===oi)||(a1.join('|')===oi&&a2.join('|')===o)))r.push('JOBS: ordenar pela coluna Job não ordenou')}
+  const csv=csvJobs(STATE).split('\r\n').filter(Boolean);
+  if(csv.length!==n+1)r.push('JOBS CSV: '+(csv.length-1)+' linhas para '+n+' jobs');
+  JSORT=sort; visaoLigar(antes);
+  try{guard==null?localStorage.removeItem('sala_visao'):localStorage.setItem('sala_visao',guard)}catch(e){}
+  return r;
+}
+// Tela em inglês: passa pelas visões (OFFICE, LISTA, JOBS), pelo menu CONFIGURAR e pelo detalhe de cada estação e procura texto
+// em português que sobrou sem tradução. Nomes e descrições vindos da configuração (salas, estações, agentes.json) são dados e saem
+// da conta antes da busca.
+function idiomaAutoteste(){
+  if(!EN||!STATE||typeof visaoLigar!=='function')return [];
+  const dados=new Set(), add=v=>{if(v&&typeof v==='string'&&v.length>1){dados.add(v);dados.add(v.toUpperCase())}};
+  all().forEach(it=>{[label(it.id),it.id,it.name,it.desc,it.responsavel,it.model,it.provider,it.schedule,it.source,it.setor,it.manutencao&&it.manutencao.motivo].forEach(add);(it.skills||[]).forEach(add)});
+  ((STATE.layout||{}).zones||[]).forEach(z=>add(z.title)); (STATE.sem_setor||[]).forEach(add);
+  const vt=STATE.vault||{}; Object.keys(vt.por_tipo||{}).forEach(add); Object.keys((vt.auditoria||{}).categorias||{}).forEach(add);
+  (STATE.feed||[]).forEach(e=>add(e.model));
+  const D=[...dados].sort((a,b)=>b.length-a.length), textos=[];
+  const colher=()=>{const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;
+    while((n=w.nextNode()))if(!n.parentElement.closest('#dbg,#dbg3d,#dbgpx,script,style'))textos.push(n.nodeValue);
+    document.querySelectorAll('[title],[aria-label]').forEach(e=>{if(!e.closest('#dbg'))textos.push(e.getAttribute('title')||'',e.getAttribute('aria-label')||'')})};
+  const antes=VISAO, sel=SEL, guard=(()=>{try{return localStorage.getItem('sala_visao')}catch(e){return null}})();
+  const tv=document.body.classList.contains('tv');
+  (tv?['office']:['office','lista','jobs']).forEach(v=>{visaoLigar(v);colher()});
+  visaoLigar(antes); try{guard==null?localStorage.removeItem('sala_visao'):localStorage.setItem('sala_visao',guard)}catch(e){}
+  if(!tv)all().forEach(it=>{if(STATIONS[it.id]){select(it.id);textos.push($('detail').textContent)}});
+  if(!tv){if(sel)select(sel);else limparSel()}
+  const PT=/[ãõçáéíóúâêôà]|\b(de|da|em|sem|hoje|agora|falha|falhas|rodando|nenhum|nenhuma|atrasado|chamados|equipe|clique|dias|execuç\w*|última|próxima|estação)\b/i, ruins=new Set();
+  textos.forEach(t=>{let s=t||'';for(const d of D)if(s.includes(d))s=s.split(d).join(' ');const m=s.match(PT);
+    if(m){const i=Math.max(0,m.index-30);ruins.add(s.slice(i,m.index+40).replace(/\s+/g,' ').trim())}});
+  return [...ruins].slice(0,10).map(x=>'IDIOMA: texto em português na tela em inglês: «'+x+'»');
+}
 function debugReport(){
+  idiomaAutoteste().forEach(errPush);
+  jobsAutoteste().forEach(errPush);
   csvAutoteste().forEach(errPush);
   feedAutoteste().forEach(errPush);
   lateralAutoteste().forEach(errPush);

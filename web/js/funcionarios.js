@@ -245,7 +245,7 @@ let ACUM=0;
 // fps no card Operação (sempre visível, sem cor e fora do veredito); ?fps=1 mostra também voltas do laço e o pior quadro no topo
 function fpsMostrar(janela){
   const n=Math.round(FD*1000/janela), el=$('k-fps');
-  if(el)el.textContent=CFG.anim==='desligada'?'animação desligada':n+' fps'+(CFG.anim==='reduzida'?' · reduzida':'');
+  if(el)el.textContent=CFG.anim==='desligada'?T('animação desligada','animation off'):n+' fps'+(CFG.anim==='reduzida'?T(' · reduzida',' · reduced'):'');
   if(QS.has('fps')){$('fps').style.display='';$('fps').textContent=Math.round(FR*1000/janela)+' voltas/s · '+n+' fps · script '+FMAX.toFixed(1)+' ms (pior quadro)'}
 }
 function loop(ts){const dt=Math.min(.1,(ts-LAST)/1000||0);LAST=ts;

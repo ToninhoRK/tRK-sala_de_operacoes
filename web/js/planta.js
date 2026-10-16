@@ -130,7 +130,7 @@ function zoneWalls(z){
   // placa do setor na parede dos fundos: sempre cabe na parede (sala estreita: começa mais à esquerda e comprime o texto)
   const nat=z.title.length*9.2+16, off=nat<=(z.w-.95)*S?.8:.4, len=Math.min(nat,(z.w-off-.15)*S);
   const tl=len<nat?` textLength="${(len-18).toFixed(1)}" lengthAdjust="spacingAndGlyphs"`:'';
-  wallDecor(z,'back',x0+off,len/S,38,60,(a,dz)=>{const o=P(a,y0,-dz);return `<g class="plq" data-zone="${z.id}" transform="matrix(1,.5,0,1,${o[0]},${o[1]})"><title>${esc(z.title)}: clique para aproximar</title><rect class="plaque" x="0" y="-60" width="${len.toFixed(1)}" height="22" rx="2"/><text class="ptext" x="9" y="-44.5"${tl}>${esc(z.title)}</text></g>`},'placa');
+  wallDecor(z,'back',x0+off,len/S,38,60,(a,dz)=>{const o=P(a,y0,-dz);return `<g class="plq" data-zone="${z.id}" transform="matrix(1,.5,0,1,${o[0]},${o[1]})"><title>${esc(z.title)}: ${T('clique para aproximar','click to zoom in')}</title><rect class="plaque" x="0" y="-60" width="${len.toFixed(1)}" height="22" rx="2"/><text class="ptext" x="9" y="-44.5"${tl}>${esc(z.title)}</text></g>`},'placa');
 }
 
 /* OBJETOS PENDURADOS NA PAREDE (placa, painéis, quadro). Cada um é fatiado nos mesmos painéis de vidro da parede:
@@ -199,14 +199,14 @@ function vaultWall(z,ya,W){
   // parede da esquerda, na altura do canto de convivência (acima dos sofás, até a cafeteira): ali não há mesa, selo nem boneco na frente.
   // Compacto (W<120, DIRETORIA rasa): só total e auditoria; as variações ficam no tooltip.
   const x0=z.x, F='font-family="ui-monospace,Menlo,Consolas,monospace"', C=W<120;
-  wallDecor(z,'left',ya,W/S,6,65,a=>{const o=P(x0,a+W/S,0);return `<g transform="matrix(1,-.5,0,1,${o[0]},${o[1]})"><title data-v="t">notas do vault</title>
+  wallDecor(z,'left',ya,W/S,6,65,a=>{const o=P(x0,a+W/S,0);return `<g transform="matrix(1,-.5,0,1,${o[0]},${o[1]})"><title data-v="t">${T('notas do vault','vault notes')}</title>
     <rect x="0" y="-65" width="${W}" height="59" rx="2.5" fill="#0A1118" stroke="#2A4458"/>
-    <text x="7" y="-54" ${F} font-size="${C?8:9}" fill="#8FB0C4" letter-spacing=".4">${C?'NOTAS · VAULT':'NOTAS NO VAULT'}</text>
+    <text x="7" y="-54" ${F} font-size="${C?8:9}" fill="#8FB0C4" letter-spacing=".4">${C?T('NOTAS · VAULT','VAULT · NOTES'):T('NOTAS NO VAULT','NOTES IN VAULT')}</text>
     <text data-v="n" x="7" y="-29" ${F} font-size="${C?24:28}" font-weight="700" fill="#E6F4FA">—</text>`+(C?'':`
     <text data-v="d1" x="${W-7}" y="-41" text-anchor="end" ${F} font-size="11.5" font-weight="700" fill="#2BD4F2"></text>
     <text data-v="d2" x="${W-7}" y="-29" text-anchor="end" ${F} font-size="10" fill="#8FB0C4"></text>`)+`
     <line x1="5" y1="-23" x2="${W-5}" y2="-23" stroke="#2A4458" stroke-width=".7"/>
-    <text x="7" y="-11" ${F} font-size="${C?7.5:9}" fill="#8FB0C4" letter-spacing=".4">${C?'AUDIT.':'AUDITORIA'}</text>
+    <text x="7" y="-11" ${F} font-size="${C?7.5:9}" fill="#8FB0C4" letter-spacing=".4">${C?'AUDIT.':T('AUDITORIA','AUDIT')}</text>
     <circle data-v="led" cx="${C?40:70}" cy="-14.2" r="4.2" fill="#566A7B"/>
     <text data-v="a" x="${C?48:79}" y="-10.4" ${F} font-size="${C?10:11.5}" font-weight="700" fill="#9FB4C4">—</text>
     </g>`},'painel');
@@ -214,11 +214,11 @@ function vaultWall(z,ya,W){
 /* SALA GOVERNANÇA (equipe do Agidesk): painel na parede dos fundos, logo abaixo da placa, com os totais da equipe. Só números; textos atualizados por renderEquipe(). */
 function equipeWall(z){
   const x0=z.x, W=Math.min(112,(z.w-.7)*S), F='font-family="ui-monospace,Menlo,Consolas,monospace"';
-  wallDecor(z,'back',x0+.35,W/S,1,37,a=>{const o=P(a,z.y,0);return `<g transform="matrix(1,.5,0,1,${o[0]},${o[1]})"><title data-e="t">equipe Governança de TI no Agidesk</title>
+  wallDecor(z,'back',x0+.35,W/S,1,37,a=>{const o=P(a,z.y,0);return `<g transform="matrix(1,.5,0,1,${o[0]},${o[1]})"><title data-e="t">${T('equipe Governança de TI no Agidesk','IT Governance team on Agidesk')}</title>
     <rect x="0" y="-37" width="${W}" height="35" rx="2" fill="#0A1118" stroke="#2A4458"/>
-    <text x="5" y="-26.5" ${F} font-size="8" fill="#8FB0C4">EM ABERTO</text>
+    <text x="5" y="-26.5" ${F} font-size="8" fill="#8FB0C4">${T('EM ABERTO','OPEN')}</text>
     <text data-e="ab" x="${W-5}" y="-25.5" text-anchor="end" ${F} font-size="12" font-weight="700" fill="#E6F4FA">—</text>
-    <text x="5" y="-14.5" ${F} font-size="8" fill="#8FB0C4">SEM RESPONS.</text>
+    <text x="5" y="-14.5" ${F} font-size="8" fill="#8FB0C4">${T('SEM RESPONS.','UNASSIGNED')}</text>
     <text data-e="sr" x="${W-5}" y="-13.5" text-anchor="end" ${F} font-size="12" font-weight="700" fill="#F2A93B">—</text>
     <text data-e="ts" x="5" y="-5" ${F} font-size="6.6" fill="#6F8496">—</text></g>`},'painel');
 }
@@ -226,25 +226,27 @@ const setD=(attr,k,txt,fill)=>document.querySelectorAll('['+attr+'="'+k+'"]').fo
 function renderEquipe(s){
   if(!document.querySelector('[data-e="ab"]'))return;
   const e=s.equipe||null, f=v=>v==null?'—':String(v), E=(k,t,c)=>setD('data-e',k,t,c);
-  if(!e){E('ab','—');E('sr','—');E('ts','aguardando leitura');return}
+  if(!e){E('ab','—');E('sr','—');E('ts',T('aguardando leitura','waiting for data'));return}
   E('ab',f(e.abertos_total)); E('sr',f(e.sem_responsavel),e.sem_responsavel>0?'#F2A93B':'#8FE0AE');
-  const m=e.age_s; E('ts','lido há '+(m<90?'instantes':Math.round(m/60)+' min')+(e.velho?' · DEFASADO':''),e.velho?'#F2A93B':'#6F8496');
-  E('t','Equipe Governança de TI no Agidesk: '+f(e.abertos_total)+' chamados em aberto, '+f(e.sem_responsavel)+' sem responsável (lido há '+(m<90?'instantes':Math.round(m/60)+' min')+')');
+  const m=e.age_s, li=m<90?T('lido há instantes','read just now'):T('lido há '+Math.round(m/60)+' min','read '+Math.round(m/60)+' min ago');
+  E('ts',li+(e.velho?T(' · DEFASADO',' · STALE'):''),e.velho?'#F2A93B':'#6F8496');
+  E('t',T('Equipe Governança de TI no Agidesk: '+f(e.abertos_total)+' chamados em aberto, '+f(e.sem_responsavel)+' sem responsável (','IT Governance team on Agidesk: '+f(e.abertos_total)+' open tickets, '+f(e.sem_responsavel)+' unassigned (')+li+')');
 }
 function renderVault(s){
   if(!document.querySelector('[data-v="n"]'))return;
   const v=s.vault||null, V=(k,t,c)=>setD('data-v',k,t,c);
-  if(!v||v.total==null){V('n','—');V('d1','');V('d2','aguardando contagem');V('led',null,'#566A7B');V('a','—');return}
-  V('n',v.total.toLocaleString('pt-BR'));
+  if(!v||v.total==null){V('n','—');V('d1','');V('d2',T('aguardando contagem','waiting for the count'));V('led',null,'#566A7B');V('a','—');return}
+  V('n',v.total.toLocaleString(LOCALE));
   const sg=x=>(x>0?'+':x<0?'−':'±')+Math.abs(x);
-  if(v.delta_hoje==null){V('d1','');V('d2','desde hoje')}
-  else{V('d1',sg(v.delta_hoje)+' hoje');V('d2',sg(v.delta_semana)+(v.dias_semana>=7?' em 7 dias':' em '+v.dias_semana+' d'))}
+  if(v.delta_hoje==null){V('d1','');V('d2',T('desde hoje','since today'))}
+  else{V('d1',sg(v.delta_hoje)+T(' hoje',' today'));V('d2',sg(v.delta_semana)+(v.dias_semana>=7?T(' em 7 dias',' in 7 days'):T(' em ',' in ')+v.dias_semana+' d'))}
   const au=v.auditoria, vel=au&&au.age_s>5400;
   if(!au){V('led',null,'#566A7B');V('a','—','#9FB4C4')}
-  else if(au.divergencias===0){V('led',null,vel?'#566A7B':'#46BE72');V('a','OK'+(vel?' (antiga)':''),vel?'#9FB4C4':'#8FE0AE')}
-  else{V('led',null,vel?'#566A7B':'#EF4444');V('a',au.divergencias+' DIVERG.'+(vel?' (antiga)':''),vel?'#9FB4C4':'#F2B8B8')}
-  V('t','Notas no vault: '+v.total.toLocaleString('pt-BR')+' (contagem de '+(v.age_s<90?'instantes':Math.round(v.age_s/60)+' min')+' atrás). Por tipo: '+Object.entries(v.por_tipo||{}).map(([k,x])=>k+' '+x).join(' · ')
-    +(au?'. Auditoria conferida há '+(au.age_s<90?'instantes':Math.round(au.age_s/60)+' min')+': '+(au.divergencias===0?'nenhuma divergência':au.divergencias+' divergência(s) ('+Object.entries(au.categorias||{}).map(([k,x])=>k+' '+x).join(', ')+')'):''));
+  else if(au.divergencias===0){V('led',null,vel?'#566A7B':'#46BE72');V('a','OK'+(vel?T(' (antiga)',' (old)'):''),vel?'#9FB4C4':'#8FE0AE')}
+  else{V('led',null,vel?'#566A7B':'#EF4444');V('a',au.divergencias+T(' DIVERG.',' MISMATCH')+(vel?T(' (antiga)',' (old)'):''),vel?'#9FB4C4':'#F2B8B8')}
+  const ha=x=>x<90?T('instantes','a moment'):Math.round(x/60)+' min';
+  V('t',T('Notas no vault: ','Notes in the vault: ')+v.total.toLocaleString(LOCALE)+T(' (contagem de '+ha(v.age_s)+' atrás). Por tipo: ',' (counted '+ha(v.age_s)+' ago). By type: ')+Object.entries(v.por_tipo||{}).map(([k,x])=>k+' '+x).join(' · ')
+    +(au?T('. Auditoria conferida há '+ha(au.age_s)+': ','. Audit checked '+ha(au.age_s)+' ago: ')+(au.divergencias===0?T('nenhuma divergência','no mismatches'):au.divergencias+T(' divergência(s) (',' mismatch(es) (')+Object.entries(au.categorias||{}).map(([k,x])=>k+' '+x).join(', ')+')'):''));
 }
 
 /* adereços fixos da sala: estantes, impressora, planta */
@@ -420,7 +422,7 @@ function stationBody(st,gBase,gOver){
   const lg=document.createElementNS(NS,'g'); lg.setAttribute('class','st lb idle'); lg.dataset.id=id;
   lg.innerHTML=st.isEquipe&&it.decor?''
     :st.isEquipe
-    ?`<text class="nm" x="${lx}" y="${ly}">${esc(it.name).toUpperCase()}</text><text class="sx" x="${lx}" y="${ly+14}" data-r="sx">—</text>`+(st.z.cols>1?'':`<text class="sx" x="${lx}" y="${ly+27}" data-r="sy">—</text>`)+`<title>Equipe Governança de TI: chamados em aberto e encerrados hoje (totais da equipe, sem números por pessoa)</title>`
+    ?`<text class="nm" x="${lx}" y="${ly}">${esc(it.name).toUpperCase()}</text><text class="sx" x="${lx}" y="${ly+14}" data-r="sx">—</text>`+(st.z.cols>1?'':`<text class="sx" x="${lx}" y="${ly+27}" data-r="sy">—</text>`)+`<title>${T('Equipe Governança de TI: chamados em aberto e encerrados hoje (totais da equipe, sem números por pessoa)','IT Governance team: open tickets and tickets closed today (team totals, no numbers per person)')}</title>`
     :`<text class="nm" x="${lx}" y="${ly}">${esc(label(id).toUpperCase())}</text><text class="sx" x="${lx}" y="${ly+14}" data-r="sx">—</text><title>${esc(label(id))}</title>`;
   gOver.appendChild(lg);
   [gb,gs,ov].forEach(e=>e.addEventListener('click',()=>select(it.decor?'equipe:agidesk':id)));   // mesa ilustrativa da equipe abre a estação da equipe

@@ -5,6 +5,17 @@ window.__errs=[]; const errPush=m=>{if(window.__errs.length<50)window.__errs.pus
 window.addEventListener('error',e=>errPush(e.message+' @'+String(e.filename||'').split('/').pop()+':'+e.lineno));
 const QS = new URLSearchParams(location.search);
 const DEMO = QS.has('demo'), DBG = QS.has('debug');
+/* Idioma (16/10/2026): pelo navegador; português fica em português, qualquer outra língua vira inglês. ?lang=pt|en força
+   (testes e capturas). Cada texto visível fica com o par lado a lado: T('português','English'). Nomes de salas e estações
+   são dados (layout.json/agentes.json) e não são traduzidos. */
+const LANG=((QS.get('lang')||navigator.language||'pt')+'').toLowerCase().startsWith('pt')?'pt':'en';
+const EN=LANG==='en', T=(pt,en)=>EN?en:pt, LOCALE=EN?'en-US':'pt-BR';
+const decTxt=v=>EN?String(v):String(v).replace('.',',');      // vírgula decimal só em português
+document.documentElement.lang=EN?'en':'pt-BR';
+if(EN){document.title='Operations Room · AI agents';     // textos fixos do index.html: atributos data-en / data-en-title / data-en-aria
+  document.querySelectorAll('[data-en]').forEach(e=>e.textContent=e.dataset.en);
+  document.querySelectorAll('[data-en-title]').forEach(e=>e.title=e.dataset.enTitle);
+  document.querySelectorAll('[data-en-aria]').forEach(e=>e.setAttribute('aria-label',e.dataset.enAria))}
 const S=30, H=15, OY=112;
 const SHELF_D=.3;                  // profundidade das estantes (un.); o corredor da parede esquerda fica em Lleft = x0+.75
 let OX=0, PW=24, PH=16, CORR=14.4;
@@ -37,24 +48,27 @@ const pad=n=>String(n).padStart(2,'0');
 const parseTs=s=>s?new Date(s.replace(' ','T')):null;
 function fmtTs(s){const d=parseTs(s);if(!d||isNaN(d))return '—';const n=new Date();
   const hm=pad(d.getHours())+':'+pad(d.getMinutes());
-  return d.toDateString()===n.toDateString()?hm:pad(d.getDate())+'/'+pad(d.getMonth()+1)+' '+hm}
+  return d.toDateString()===n.toDateString()?hm:diaMes(d)+' '+hm}
+// dia e mês curtos: dd/mm em português, mm/dd em inglês. Aceita Date ou texto 'AAAA-MM-DD…'
+function diaMes(x){const d=typeof x==='string'?x.slice(8,10):pad(x.getDate()), m=typeof x==='string'?x.slice(5,7):pad(x.getMonth()+1);return EN?m+'/'+d:d+'/'+m}
 function rel(s){const d=parseTs(s);if(!d||isNaN(d))return '—';const m=Math.max(0,(Date.now()-d)/60000);
-  if(m<1)return 'agora';if(m<60)return 'há '+Math.round(m)+' min';if(m<1440)return 'há '+Math.round(m/60)+' h';return 'há '+Math.round(m/1440)+' d'}
+  if(m<1)return T('agora','now');const v=m<60?Math.round(m)+' min':m<1440?Math.round(m/60)+' h':Math.round(m/1440)+' d';return T('há '+v,v+' ago')}
 function mmss(sec){sec=Math.max(0,Math.floor(sec));return pad(Math.floor(sec/60))+':'+pad(sec%60)}
-const STL={running:'EM EXECUÇÃO',ok:'OK',error:'FALHA',idle:'SEM EXEC.',manut:'MANUTENÇÃO'};
+const STL=EN?{running:'RUNNING',ok:'OK',error:'FAILED',idle:'NO RUNS',manut:'MAINTENANCE'}:{running:'EM EXECUÇÃO',ok:'OK',error:'FALHA',idle:'SEM EXEC.',manut:'MANUTENÇÃO'};
 // período dos indicadores (CONFIGURAR > Período): o servidor devolve em periodo_dias
 const PER=()=>(typeof STATE!=='undefined'&&STATE&&STATE.periodo_dias)||+((typeof CFG!=='undefined'&&CFG.periodo)||7);
-const fmtPct=v=>v==null?'—':v.toLocaleString('pt-BR',{maximumFractionDigits:1})+'%';
-function sucTxt(su){if(!su||!su.execucoes)return 'sem execuções no período'+(su&&su.manutencao?' · '+su.manutencao+' em manutenção (fora da conta)':'');
-  return fmtPct(su.pct)+' OK · '+(su.execucoes-su.falhas)+' de '+su.execucoes+(su.falhas?' · <span style="color:var(--red)">'+su.falhas+' falha'+(su.falhas>1?'s':'')+'</span>':'')+(su.manutencao?' · '+su.manutencao+' em manutenção (fora da conta)':'')}
-const JSTL={running:'ATENDENDO VOCÊ',ok:'DISPONÍVEL',idle:'DISPONÍVEL',error:'DISPONÍVEL'};
+const fmtPct=v=>v==null?'—':v.toLocaleString(LOCALE,{maximumFractionDigits:1})+'%';
+const manTxt=n=>n?' · '+T(n+' em manutenção (fora da conta)',n+' under maintenance (not counted)'):'';
+function sucTxt(su){if(!su||!su.execucoes)return T('sem execuções no período','no runs in the period')+manTxt(su&&su.manutencao);
+  return fmtPct(su.pct)+' OK · '+(su.execucoes-su.falhas)+T(' de ',' of ')+su.execucoes+(su.falhas?' · <span style="color:var(--red)">'+su.falhas+T(' falha'+(su.falhas>1?'s':''),' failure'+(su.falhas>1?'s':''))+'</span>':'')+manTxt(su.manutencao)}
+const JSTL=EN?{running:'TALKING TO YOU',ok:'AVAILABLE',idle:'AVAILABLE',error:'AVAILABLE'}:{running:'ATENDENDO VOCÊ',ok:'DISPONÍVEL',idle:'DISPONÍVEL',error:'DISPONÍVEL'};
 const labelTec=id=>id.replace('cron:govti-','cron · ').replace('office365','o365').replace(/-/g,' ');
 // nomes amigáveis: campo "nomes" do layout.json (o servidor manda em "titulo"); CONFIGURAR > Nomes > Técnicos volta ao id
 let TITULOS={};
 function titulosDe(s){const t={};[...(s.agents||[]),...(s.crons||[])].forEach(x=>{if(x.titulo)t[x.id]=x.titulo});return t}
 const label=id=>(typeof CFG!=='undefined'&&CFG.nomes==='tecnicos'?'':TITULOS[id])||labelTec(id);
-const fmtDur=s=>s==null?'':s<60?Math.round(s)+' s':s<3600?Math.round(s/60)+' min':(s/3600).toFixed(1).replace('.',',')+' h';
-const fmtTok=n=>n>=1e6?(n/1e6).toFixed(1).replace('.',',')+' mi':n>=1e3?Math.round(n/1e3)+' mil':String(n||0);
+const fmtDur=s=>s==null?'':s<60?Math.round(s)+' s':s<3600?Math.round(s/60)+' min':decTxt((s/3600).toFixed(1))+' h';
+const fmtTok=n=>n>=1e6?decTxt((n/1e6).toFixed(1))+T(' mi','M'):n>=1e3?Math.round(n/1e3)+T(' mil','k'):String(n||0);
 
 /* ---------- geometria ---------- */
 function box(x0,y0,x1,y1,z0,z1,top,l,r,extra=''){

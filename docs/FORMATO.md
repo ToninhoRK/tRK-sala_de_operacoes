@@ -119,6 +119,18 @@ python3 registrar_execucao.py resumo_diario --modelo claude-sonnet -- claude -p 
 Execuções individuais, "rodando agora" e a contagem do dia de cada job vêm do banco `executions.db` do agendador do
 Hermes; sem ele, o job aparece só com o estado do `jobs.json`.
 
+Na tela **JOBS**, o agendamento por extenso e as próximas execuções (7 dias) saem de `schedule.expr` (cron de 5 campos:
+`*`, listas, intervalos e passos; dia do mês e dia da semana restritos ao mesmo tempo valem com OU, como no cron). Agendamento
+que não é cron mostra o `display` e a próxima execução do `next_run_at`. Job pausado ou desligado não tem próximas.
+A partir da versão 4 do `/api/state`, cada job traz `agenda_texto`, `proximas` (`[["AAAA-MM-DD HH:MM", em manutenção]]`),
+`diario` (`[OK, falhas, em manutenção]` por dia do período; `null` antes do primeiro registro), `duracao`
+(`media_s`, `max_s`, `n`, `soma_s` das execuções OK fora de manutenção) e `ultimas`; e `kpis.jobs_dados_desde`.
+
+**Língua da tela:** a página segue o idioma do navegador (português fica em português; qualquer outra língua, inglês) ou
+`?lang=pt|en`. O servidor manda os dois textos onde o texto vem dele: `agenda_texto`/`agenda_en` de cada job, `msg`/`msg_en`
+de cada item de `saude` (o e-mail do vigia usa `msg`) e `erro`/`erro_en` no `/api/atividade`. Nomes e descrições do
+`agentes.json` e do `layout.json` são dados e aparecem como foram escritos.
+
 ## Salas e nomes: `layout.json`
 
 - `setores`: lista de salas na ordem em que aparecem (`id`, `titulo`, `linha` `cima` ou `baixo`, `agentes`, `prefixos`,

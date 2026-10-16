@@ -4,14 +4,14 @@
 
 **Watch your AI agents at work.** Sala de Operações ("Operations Room") turns agents, scheduled jobs and your team's ticket queue into a living office where every agent is an employee with a desk of their own. Whoever is running sits down and types. Whoever failed stands up and asks for help. One look tells you how the operation is doing, with no logs and no terminal. It works with **Hermes** and with **Claude Code**.
 
-![Sala de Operações: isometric floor plan with rooms, desks and one employee per agent](docs/sala-de-operacoes.png)
+![Sala de Operações: isometric floor plan with rooms, desks and one employee per agent](docs/en/sala-de-operacoes.png)
 
-<sub>All screenshots use demo mode, with fictitious agents and numbers. The interface is currently in Brazilian Portuguese.</sub>
+<sub>All screenshots use demo mode, with fictitious agents and numbers. The interface speaks English and Brazilian Portuguese and follows your browser's language; room and agent names come from your own configuration.</sub>
 
 ## Contents
 
-- [Five ways to see the same operation](#five-ways-to-see-the-same-operation)
-  - [Floor plan](#floor-plan-the-day-to-day) · [TV mode](#tv-mode-for-the-wall-of-the-room) · [3D](#3d-the-same-room-with-depth) · [Pixel art](#pixel-art-the-same-room-game-style) · [List](#list-everything-in-one-table)
+- [Six ways to see the same operation](#six-ways-to-see-the-same-operation)
+  - [Floor plan](#floor-plan-the-day-to-day) · [TV mode](#tv-mode-for-the-wall-of-the-room) · [3D](#3d-the-same-room-with-depth) · [Pixel art](#pixel-art-the-same-room-game-style) · [List](#list-everything-in-one-table) · [Jobs](#jobs-the-schedule-and-history-of-your-routines)
 - [What you see at a glance](#what-you-see-at-a-glance)
 - [Highlights](#highlights)
 - [Requirements](#requirements)
@@ -25,30 +25,35 @@
 
 ---
 
-## Five ways to see the same operation
+## Six ways to see the same operation
 
 ### Floor plan: the day-to-day
 The full view for whoever follows things closely. Each room groups one kind of agent, and each desk shows the agent's name and state. Alongside you get the run history, the model used and the next scheduled run. Click a desk to see the details.
 
 ### TV mode: for the wall of the room
-Made to be read from across the room. The indicators get big, the side panel goes away and the **AGORA** ("now") column shows only what matters right now: what failed, what is stuck and what is running. When everything is fine, it says so too.
+Made to be read from across the room. The indicators get big, the side panel goes away and the **NOW** column shows only what matters right now: what failed, what is stuck and what is running. When everything is fine, it says so too.
 
-![TV mode: large indicators and the AGORA column with failures and runs in progress](docs/sala-tv.png)
+![TV mode: large indicators and the NOW column with failures and runs in progress](docs/en/sala-tv.png)
 
 ### 3D: the same room, with depth
 The same floor plan, now in real 3D, with volume, light and shadow. The angle, the furniture, the people and the labels stay in the same place, so the room is still yours.
 
-![3D theme: the same floor plan with volume, light and shadow](docs/sala-3d.png)
+![3D theme: the same floor plan with volume, light and shadow](docs/en/sala-3d.png)
 
 ### Pixel art: the same room, game style
 The same floor plan redrawn in pixels, with an outline around every piece of furniture and hand-drawn employees wearing the same clothes and making the same gestures. Names and states stay sharp on top. Zoom into a room (mouse wheel or click its sign) to see every pixel. There is a TV version too.
 
-![Pixel art theme: the same floor plan drawn in pixels](docs/sala-pixel.png)
+![Pixel art theme: the same floor plan drawn in pixels](docs/en/sala-pixel.png)
 
 ### List: everything in one table
-The **OFFICE | LISTA** switch swaps the floor plan for a table with every station: state, room, owner, last run, runs in the period, success rate and usage. Click a column title to sort, and use **EXPORTAR CSV** (export CSV) to take the numbers to a spreadsheet. A station under maintenance shows in lilac and raises no alarm.
+The **OFFICE | LIST** switch swaps the floor plan for a table with every station: state, room, owner, last run, runs in the period, success rate and usage. Click a column title to sort, and use **EXPORT CSV** to take the numbers to a spreadsheet. A station under maintenance shows in lilac and raises no alarm.
 
-![List mode: table with owner, success rate, one station failing and another under maintenance](docs/sala-lista.png)
+![List mode: table with owner, success rate, one station failing and another under maintenance](docs/en/sala-lista.png)
+
+### Jobs: the schedule and history of your routines
+The third option of the switch, **JOBS**, puts only the scheduled routines on one page. At the top are the indicators for the period: runs, success rate, failures, average duration and the next run, with a countdown. Below them, the runs coming up in the next 7 days, worked out from each routine's schedule and spelled out in plain words ("weekdays, every hour, 08:00 to 18:00"). Then the history as a grid, one square per day: green, red, lilac for maintenance. Last, a sortable table per routine with **EXPORT CSV**.
+
+![JOBS view: job indicators, the coming week's runs, history grid and per-routine table](docs/en/sala-jobs.png)
 
 ---
 
@@ -60,29 +65,30 @@ The **OFFICE | LISTA** switch swaps the floor plan for a table with every statio
 | Employee walking around, green badge | the last run finished fine |
 | Employee standing with a **!**, red badge | the last run failed |
 | Speech bubble with a **?**, in amber | the agent is running, but has taken no action for 5 minutes |
-| Amber clock, "ATRASADO HÁ…" ("late by…") | a job should have run and didn't |
+| Amber clock, "LATE BY…" | a job should have run and didn't |
 | Blinking rack in the scheduler room | a scheduled job is running, with its next run alongside |
 
-At the top, a verdict answers first: **NORMAL**, **ATENÇÃO** (attention) or **FALHA** (failure). Next to it you get today's numbers, the trend and success rate for the period (7 to 90 days), the latest activity and, if you want, your Claude plan usage.
+At the top, a verdict answers first: **NORMAL**, **ATTENTION** or **FAILURE**. Next to it you get today's numbers, the trend and success rate for the period (7 to 90 days), the latest activity and, if you want, your Claude plan usage.
 
 ## Highlights
 
 - **Work passed from hand to hand:** stations in a chain are connected by lines that light up when the source runs. When an agent in the chain starts running, the employee from the previous step walks a folder over to their desk: you can watch data being handed over between rooms.
 - **What it is doing right now:** click an agent's employee to see, live, the time and the name of every tool it uses. Only the tool name: nothing that was asked or answered.
-- **The brain has a desk too:** the main Hermes agent is Jarvis, a robot in the boardroom (DIRETORIA), which shows **ATENDENDO VOCÊ** ("assisting you") while you are talking to it.
+- **The brain has a desk too:** the main Hermes agent is Jarvis, a robot in the boardroom (DIRETORIA), which shows **TALKING TO YOU** while you are talking to it.
 - **Panels on the wall:** the note count of your Obsidian vault (how many arrived today and this week, and the audit result) and your team queue totals hang on the room walls, like in a real office.
 - **A late job doesn't go unnoticed:** if a scheduled job didn't fire on time (or an agent went past its agreed interval without running), its station turns amber and the alarm goes off. Green only when it is really up to date.
 - **Sound alerts:** a short sound when something fails, hangs or runs late, and a softer one when it is back to normal. The room keeps watching even with the tab in the background.
-- **Activity without the noise:** repeated runs collapse into a single line ("×6 · desde 09:00", since 09:00), only what broke the pattern is highlighted, and one click shows **exceptions only**.
-- **Trend, success and usage:** runs and failures over 7, 15, 30, 60 or 90 days (you pick in CONFIGURAR) at the top and on every station, with the success rate (successful runs ÷ runs), each run's duration and tokens and estimated cost per agent. The room keeps its own history of scheduled jobs, so long periods work for them too.
+- **Activity without the noise:** repeated runs collapse into a single line ("×6 · since 09:00"), only what broke the pattern is highlighted, and one click shows **exceptions only**.
+- **Trend, success and usage:** runs and failures over 7, 15, 30, 60 or 90 days (you pick in SETTINGS) at the top and on every station, with the success rate (successful runs ÷ runs), each run's duration and tokens and estimated cost per agent. The room keeps its own history of scheduled jobs, so long periods work for them too.
 - **E-mail alerts (optional):** the room's watcher, a lightweight script with no AI, checks the operation every 5 minutes and e-mails a single address when something fails, hangs, runs late or a data source has a problem, and again when it is back to normal. At most one problem alert per station every 30 minutes, so a flaky job doesn't flood your inbox. Only names, states and times. If the watcher itself stops, the room tells you. Every Monday at 8 a.m. you also get a weekly summary: success rate, failures per station, what is late or under maintenance, and usage per agent.
-- **Maintenance without false alarms:** opened a maintenance window for a station? It turns lilac with **MANUTENÇÃO** (maintenance) until the set date, triggers no sound or e-mail, and runs inside the window stay out of the success rate.
+- **Maintenance without false alarms:** opened a maintenance window for a station? It turns lilac with **MAINTENANCE** until the set date, triggers no sound or e-mail, and runs inside the window stay out of the success rate.
 - **Every station has an owner:** the person responsible shows up in the details, the list and the export.
-- **Nothing vanishes silently:** a run that died halfway, without reaching the end, shows up as **INTERROMPIDA** (interrupted). And if a job's script or an agent's prompt disappears from disk, the room warns you before the next run fails.
-- **Office or list:** the OFFICE | LISTA switch at the top toggles between the floor plan and the same stations in a table you can sort by state, room, owner, last run, success or usage (the active view stays lit), and the **EXPORTAR CSV** (export) button takes the table to Excel. Handy on a phone and for finding a station fast. SOM (sound) and CENTRALIZAR (center) live at the top too, with the other controls.
-- **Smoothness on display:** the Operação card shows the animation's frames per second, updated every second (normal is your screen's refresh rate: 60 on a regular monitor). A number well below that means the page is too heavy for that machine.
+- **Nothing vanishes silently:** a run that died halfway, without reaching the end, shows up as **INTERRUPTED**. And if a job's script or an agent's prompt disappears from disk, the room warns you before the next run fails.
+- **Office or list:** the OFFICE | LIST | JOBS switch at the top toggles between the floor plan and the same stations in a table you can sort by state, room, owner, last run, success or usage (the active view stays lit), and the **EXPORT CSV** button takes the table to Excel. Handy on a phone and for finding a station fast. SOUND and CENTER live at the top too, with the other controls.
+- **Smoothness on display:** the Operation card shows the animation's frames per second, updated every second (normal is your screen's refresh rate: 60 on a regular monitor). A number well below that means the page is too heavy for that machine.
+- **English or Portuguese:** the whole interface follows the browser's language: Portuguese browsers get Portuguese, everything else gets English (dates as mm/dd, CSV with commas). Add `?lang=en` or `?lang=pt` to the address to force one. Room and agent names are yours and stay as you wrote them.
 - **Keyboard friendly:** Tab moves through the stations, Enter opens the details and Esc closes them. Stations have descriptions for screen readers.
-- **Your way:** in the **CONFIGURAR** (settings) menu you choose the theme, how much animation you want, which labels show up, and whether stations display friendly names ("Consulta AD") or the technical id.
+- **Your way:** in the **SETTINGS** menu you choose the theme, how much animation you want, which labels show up, and whether stations display friendly names ("Consulta AD") or the technical id.
 - **The team in the same place (optional):** open, unassigned, overdue and closed tickets in Agidesk, plus the week's resolution time, always as team totals. Nobody becomes an individual scoreboard.
 - **Organizes itself:** a new agent gets a desk automatically, and rooms grow as the operation grows.
 - **Lightweight:** a pure Python server and a page in the browser. No database, no build step, no dependencies to install.

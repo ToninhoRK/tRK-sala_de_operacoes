@@ -9,6 +9,26 @@
         "display": "0 12 * * 1-5"
       },
       "enabled": true
+    },
+    {
+      "id": "sincronizacao-exemplo",
+      "name": "sincronizacao-exemplo",
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 8-18 * * 1-5",
+        "display": "0 8-18 * * 1-5"
+      },
+      "enabled": true
+    },
+    {
+      "id": "relatorio-semanal-exemplo",
+      "name": "relatorio-semanal-exemplo",
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 9 * * 1",
+        "display": "0 9 * * 1"
+      },
+      "enabled": true
     }
   ]
 }

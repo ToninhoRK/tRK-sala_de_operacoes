@@ -41,8 +41,8 @@ function somTocar(tipo){
   return true;
 }
 function somBotao(){if(typeof cfgMenuSync==='function')cfgMenuSync(); const b=$('som'); if(!b)return; const pend=SOM.on&&(!SOM.ctx||SOM.ctx.state!=='running');
-  b.textContent=SOM.on?'SOM: LIGADO':'SOM: DESLIGADO'; b.classList.toggle('on',SOM.on&&!pend); b.classList.toggle('pend',pend);
-  b.title=pend?'Som ligado. O navegador só libera o áudio depois do primeiro clique ou tecla nesta página (regra do navegador); isso acontece sozinho.':'Som de alerta: toca quando um agente ou job falha, quando um agente fica 5 min sem ação ou quando uma fonte de dados dá problema; um som curto e mais suave quando volta ao normal. Clique para desligar.'}
+  b.textContent=SOM.on?T('SOM: LIGADO','SOUND: ON'):T('SOM: DESLIGADO','SOUND: OFF'); b.classList.toggle('on',SOM.on&&!pend); b.classList.toggle('pend',pend);
+  b.title=pend?T('Som ligado. O navegador só libera o áudio depois do primeiro clique ou tecla nesta página (regra do navegador); isso acontece sozinho.','Sound on. The browser only allows audio after the first click or key press on this page (browser rule); this happens on its own.'):T('Som de alerta: toca quando um agente ou job falha, quando um agente fica 5 min sem ação ou quando uma fonte de dados dá problema; um som curto e mais suave quando volta ao normal. Clique para desligar.','Alert sound: plays when an agent or job fails, when an agent goes 5 min with no activity or when a data source has a problem; a short, softer sound when things are back to normal. Click to turn off.')}
 function somLigar(v){SOM.on=v;localStorage.setItem('sala_som',v?'1':'0');if(v){somCtx();setTimeout(()=>{somTocar('falha');somBotao()},60)}somBotao()}
 function somChecar(s){
   if(DEMO)return;                      // dados simulados: não toca

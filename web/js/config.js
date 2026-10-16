@@ -8,13 +8,19 @@
 const temaTV=t=>t==='tv'||t==='pixeltv', temaPX=t=>t==='pixel'||t==='pixeltv';
 const CFG_PADRAO={tema:'planta',anim:'completa',rotulos:'todos',nomes:'amigaveis',periodo:'7'};
 const CFG_OPCOES={
-  tema:{planta:'Planta isométrica',tv:'Modo TV','3d':'3D',pixel:'Pixel art',pixeltv:'Pixel art · Modo TV'},
-  anim:{completa:'Completa',reduzida:'Reduzida',desligada:'Desligada'},
-  rotulos:{todos:'Todos',ativos:'Nomes + rodando e falha',problemas:'Só rodando e falha',nenhum:'Nenhum'},
-  nomes:{amigaveis:'Amigáveis',tecnicos:'Técnicos (id do agente)'},
-  periodo:{'7':'7 dias','15':'15 dias','30':'30 dias','60':'60 dias','90':'90 dias'},
+  tema:{planta:T('Planta isométrica','Isometric floor plan'),tv:T('Modo TV','TV mode'),'3d':'3D',pixel:'Pixel art',pixeltv:T('Pixel art · Modo TV','Pixel art · TV mode')},
+  anim:{completa:T('Completa','Full'),reduzida:T('Reduzida','Reduced'),desligada:T('Desligada','Off')},
+  rotulos:{todos:T('Todos','All'),ativos:T('Nomes + rodando e falha','Names + running and failed'),problemas:T('Só rodando e falha','Only running and failed'),nenhum:T('Nenhum','None')},
+  nomes:{amigaveis:T('Amigáveis','Friendly'),tecnicos:T('Técnicos (id do agente)','Technical (agent id)')},
+  periodo:{'7':T('7 dias','7 days'),'15':T('15 dias','15 days'),'30':T('30 dias','30 days'),'60':T('60 dias','60 days'),'90':T('90 dias','90 days')},
 };
-const CFG_AJUDA={
+const CFG_AJUDA=EN?{
+  tema:'TV mode: no side panel, bigger numbers and labels, the cursor hides when idle. 3D: the same floor plan in real 3D (light, shadow, volume), same angle and labels. Pixel art: the same floor plan drawn in pixels (zoom with the mouse wheel or by clicking a room sign); "Pixel art · TV mode" combines both.',
+  anim:'Reduced: figures at 15 frames/s and no decorative pulses (better for a TV or a slow computer). Off: nobody walks; each figure stays where its state puts it.',
+  nomes:'Friendly: the names in the "nomes" field of layout.json. Technical: the agent id, as in agentes.json and the logs.',
+  periodo:'How many days go into the trend, the success rate (OK runs ÷ runs, outside maintenance windows) and usage: at the top, in the station details, in the list and in the export. Jobs: the room keeps its own history since the watcher was installed; before that, only the last ~2 days.',
+  rotulos:'Names + running and failed: every name, but the state line only on stations running or failed (the "LAST dd/mm" goes away). Only running and failed also hides the name of OK stations and stations with no history (the badge color stays).',
+}:{
   tema:'Modo TV: sem o painel lateral, números e rótulos maiores, cursor some parado. 3D: a mesma planta em 3D de verdade (luz, sombra, volume), mesmo ângulo e rótulos. Pixel art: a mesma planta desenhada em pixels (aproxime com a roda do mouse ou clicando na placa da sala); "Pixel art · Modo TV" junta os dois.',
   anim:'Reduzida: bonecos a 15 quadros/s e sem os pulsos decorativos (melhor para TV ou computador fraco). Desligada: ninguém anda; cada boneco fica parado onde o estado manda.',
   nomes:'Amigáveis: os nomes do campo "nomes" do layout.json (ex.: Consulta AD). Técnicos: o id do agente, como no agentes.json e nos logs.',
@@ -30,7 +36,7 @@ function cfgAplicar(){
   const b=document.body;
   b.classList.toggle('tv',temaTV(CFG.tema));
   ['reduzida','desligada'].forEach(a=>b.classList.toggle('anim-'+a,CFG.anim===a));
-  {const f=document.getElementById('k-fps'); if(f)f.textContent=CFG.anim==='desligada'?'animação desligada':'medindo fps…'}   // o número vem do laço, a cada segundo
+  {const f=document.getElementById('k-fps'); if(f)f.textContent=CFG.anim==='desligada'?T('animação desligada','animation off'):T('medindo fps…','measuring fps…')}   // o número vem do laço, a cada segundo
   ['ativos','problemas','nenhum'].forEach(r=>b.classList.toggle('rot-'+r,CFG.rotulos===r));
   if(typeof cfgMenuSync==='function')cfgMenuSync();
 }
@@ -52,12 +58,13 @@ function cfgMenuMontar(){
   const m=$('cfgmenu'); if(!m)return;
   let h='';
   for(const k in CFG_OPCOES){
-    h+=`<div class="grp"><div class="tt">${{tema:'Tema',anim:'Animação',rotulos:'Rótulos das estações',nomes:'Nomes',periodo:'Período dos indicadores'}[k]}</div>`;
+    h+=`<div class="grp"><div class="tt">${(EN?{tema:'Theme',anim:'Animation',rotulos:'Station labels',nomes:'Names',periodo:'Indicator period'}:{tema:'Tema',anim:'Animação',rotulos:'Rótulos das estações',nomes:'Nomes',periodo:'Período dos indicadores'})[k]}</div>`;
     for(const v in CFG_OPCOES[k])h+=`<label><input type="radio" name="cfg-${k}" value="${v}"> ${CFG_OPCOES[k][v]}</label>`;
     h+=`<div class="aj">${CFG_AJUDA[k]}</div></div>`;
   }
-  h+=`<div class="grp"><div class="tt">Som de alerta</div><label><input type="checkbox" id="cfg-som"> Tocar em falha, agente sem ação e fonte com problema</label></div>`;
-  h+=`<div class="rod"><button id="cfg-padrao">Restaurar padrão</button><span>Fica salvo neste navegador.</span></div>`;
+  h+=`<div class="grp"><div class="tt">${T('Som de alerta','Alert sound')}</div><label><input type="checkbox" id="cfg-som"> ${T('Tocar em falha, agente sem ação e fonte com problema','Play on failure, agent with no activity and data source problem')}</label></div>`;
+  h+=`<div class="grp"><div class="tt">${T('Idioma','Language')}</div><div class="aj" id="cfg-lang">${T('Português, pelo idioma do navegador (outras línguas abrem em inglês).','English, from the browser language (Portuguese browsers open in Portuguese).')}</div></div>`;
+  h+=`<div class="rod"><button id="cfg-padrao">${T('Restaurar padrão','Restore defaults')}</button><span>${T('Fica salvo neste navegador.','Saved in this browser.')}</span></div>`;
   m.innerHTML=h;
   m.addEventListener('change',e=>{const t=e.target;
     if(t.id==='cfg-som'){if(t.checked!==SOM.on)somLigar(t.checked);return}

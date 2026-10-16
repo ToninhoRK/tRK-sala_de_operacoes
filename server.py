@@ -67,16 +67,17 @@ def ler_json(caminho):
         return json.load(f)
 
 
-def problema(fonte, msg):
+def problema(fonte, msg, msg_en=None):
+    """Fonte de dados com problema. msg (português) vai para a tela e para o e-mail do vigia; msg_en, para a tela em inglês."""
     if not any(x["fonte"] == fonte for x in SAUDE):
-        SAUDE.append({"fonte": fonte, "msg": msg})
+        SAUDE.append({"fonte": fonte, "msg": msg, "msg_en": msg_en or msg})
 
 
 def carregar_layout():
     try:
         return ler_json(LAYOUT_JSON)
     except Exception:
-        problema("layout.json", "layout.json ilegível: salas no padrão")
+        problema("layout.json", "layout.json ilegível: salas no padrão", "layout.json unreadable: default rooms")
         return {"setores": [], "padrao": {"id": "novos", "titulo": "NOVOS AGENTES", "linha": "baixo"}, "fluxos": []}
 
 
@@ -203,7 +204,7 @@ def historico():
                 try:
                     evs = eventos_log(os.path.join(LOGS, n))
                 except Exception:
-                    problema("log " + n, "log de agente ilegível: " + n)
+                    problema("log " + n, "log de agente ilegível: " + n, "agent log unreadable: " + n)
                     continue
                 for e in evs:
                     k = (e["ts"], e["agent"], e["model"], e["code"])
@@ -270,7 +271,8 @@ def execucoes():
     except FileNotFoundError:
         return out
     except Exception:
-        problema("eventos.jsonl", "eventos.jsonl do executor ilegível: rodando/custo pelo método aproximado")
+        problema("eventos.jsonl", "eventos.jsonl do executor ilegível: rodando/custo pelo método aproximado",
+                 "executor eventos.jsonl unreadable: running/cost by the approximate method")
         return out
     abertos = {}
     for l in linhas:
@@ -327,7 +329,7 @@ def custos(hist, exs, dias=7):
             "from sessions where source='oneshot' and started_at>=?", (corte - 3600,))}
         con.close()
     except Exception:
-        problema("state.db", "state.db ilegível: sem custo por agente")
+        problema("state.db", "state.db ilegível: sem custo por agente", "state.db unreadable: no cost per agent")
         return r
     usadas = set()
 
@@ -421,7 +423,8 @@ def cron_hist_sala():
     except FileNotFoundError:
         pass
     except Exception:
-        problema("histórico da Sala", "histórico próprio dos jobs ilegível: indicadores dos jobs só com os últimos ~2 dias")
+        problema("histórico da Sala", "histórico próprio dos jobs ilegível: indicadores dos jobs só com os últimos ~2 dias",
+                 "the room's own job history is unreadable: job indicators only cover the last ~2 days")
     return out
 
 
@@ -432,7 +435,8 @@ def janelas_manutencao():
     except FileNotFoundError:
         return {}
     except Exception:
-        problema("manutenção", "sala_manutencao.json ilegível: janelas de manutenção ignoradas")
+        problema("manutenção", "sala_manutencao.json ilegível: janelas de manutenção ignoradas",
+                 "sala_manutencao.json unreadable: maintenance windows ignored")
         return {}
     out = {}
     for j in (d.get("janelas") or []) if isinstance(d, dict) else []:
@@ -440,7 +444,8 @@ def janelas_manutencao():
             ini = time.mktime(time.strptime(j["de"], "%Y-%m-%d %H:%M"))
             fim = time.mktime(time.strptime(j["ate"], "%Y-%m-%d %H:%M"))
         except Exception:
-            problema("manutenção", "janela de manutenção com data inválida (%s): ignorada" % j.get("id"))
+            problema("manutenção", "janela de manutenção com data inválida (%s): ignorada" % j.get("id"),
+                     "maintenance window with an invalid date (%s): ignored" % j.get("id"))
             continue
         out.setdefault(j.get("id"), []).append((ini, fim, j.get("motivo") or ""))
     return out
@@ -472,14 +477,15 @@ def vigia_saude(agora_s):
     except FileNotFoundError:
         return
     except Exception:
-        problema("vigia", "sala_vigia.json ilegível")
+        problema("vigia", "sala_vigia.json ilegível", "sala_vigia.json unreadable")
         return
     idade = agora_s - (v.get("rodou_em") or 0)
     acordou = acordou_ha()
     if idade > VIGIA_ATRASO_S and not (acordou is not None and acordou < 600):
-        problema("vigia", "o vigia da Sala não roda há %d min: sem aviso por e-mail e sem histórico novo dos jobs" % (idade // 60))
+        problema("vigia", "o vigia da Sala não roda há %d min: sem aviso por e-mail e sem histórico novo dos jobs" % (idade // 60),
+                 "the room's watcher has not run for %d min: no e-mail alerts and no new job history" % (idade // 60))
     elif v.get("erro"):
-        problema("vigia", "vigia da Sala: %s" % v["erro"])
+        problema("vigia", "vigia da Sala: %s" % v["erro"], "room watcher: %s" % v["erro"])
 
 
 def arquivos_faltando(cat, jobs):
@@ -501,7 +507,8 @@ def arquivos_faltando(cat, jobs):
         if s and not os.path.exists(os.path.expanduser(s)):
             falta.append("pós-validação do agente %s (%s)" % (nome, os.path.basename(s)))
     if falta:
-        problema("arquivos", "%d arquivo(s) de agente/job sumiram (a próxima rodada vai falhar): %s" % (len(falta), "; ".join(falta)))
+        problema("arquivos", "%d arquivo(s) de agente/job sumiram (a próxima rodada vai falhar): %s" % (len(falta), "; ".join(falta)),
+                 "%d agent/job file(s) are missing (the next run will fail): %s" % (len(falta), "; ".join(falta)))
 
 
 def em_manutencao(janelas, t):
@@ -525,6 +532,131 @@ def indice_sucesso(execs, janelas, corte):
 
 CRON_JOBS_TODOS = []
 
+# ---- tela JOBS (16/10/2026): agendamento por extenso e próximas execuções, calculados da expressão cron do jobs.json ----
+DIAS_CURTO = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"]            # numeração do cron: 0 = domingo
+DIAS_LONGO = ["todo domingo", "toda segunda-feira", "toda terça-feira", "toda quarta-feira", "toda quinta-feira",
+              "toda sexta-feira", "todo sábado"]
+PROXIMAS_DIAS = 7          # quantos dias à frente a tela JOBS mostra
+PROXIMAS_MAX = 300         # teto por job (um job de minuto em minuto daria 10 mil): a tela avisa quando corta
+
+
+def cron_campo(txt, lo, hi):
+    """Um campo da expressão cron ('*', '*/15', '8-17', '1,4', '8-18/2', '5/10') -> conjunto de valores; ValueError se inválido."""
+    vals = set()
+    for parte in txt.split(","):
+        base, barra, passo = parte.partition("/")
+        passo = int(passo) if passo else 1
+        if passo < 1:
+            raise ValueError(txt)
+        if base == "*":
+            a, b = lo, hi
+        elif "-" in base:
+            a, b = (int(x) for x in base.split("-", 1))
+        else:
+            a = int(base)
+            b = hi if barra else a              # '5/10' = de 5 até o fim, de 10 em 10
+        if a < lo or b > hi or a > b:
+            raise ValueError(txt)
+        vals.update(range(a, b + 1, passo))
+    return vals
+
+
+def cron_campos(expr):
+    p = (expr or "").split()
+    if len(p) != 5:
+        raise ValueError(expr)
+    return {"min": cron_campo(p[0], 0, 59), "hora": cron_campo(p[1], 0, 23), "dia": cron_campo(p[2], 1, 31),
+            "mes": cron_campo(p[3], 1, 12), "sem": {d % 7 for d in cron_campo(p[4], 0, 7)},
+            "dia_livre": p[2] == "*", "sem_livre": p[4] == "*"}
+
+
+def proximas_execucoes(expr, desde, ate):
+    """Instantes (epoch, hora local) em que a expressão cron dispara entre `desde` (inclusive) e `ate`. Dia do mês e dia
+    da semana restritos ao mesmo tempo valem com OU (regra do cron). Para em PROXIMAS_MAX."""
+    c = cron_campos(expr)
+    out = []
+    dia = datetime.fromtimestamp(desde).date()
+    fim = datetime.fromtimestamp(ate).date()
+    while dia <= fim and len(out) < PROXIMAS_MAX:
+        sem = (dia.weekday() + 1) % 7
+        m_dia, m_sem = dia.day in c["dia"], sem in c["sem"]
+        if c["dia_livre"] and c["sem_livre"]:
+            vale = True
+        elif c["dia_livre"]:
+            vale = m_sem
+        elif c["sem_livre"]:
+            vale = m_dia
+        else:
+            vale = m_dia or m_sem
+        if vale and dia.month in c["mes"]:
+            for h in sorted(c["hora"]):
+                for m in sorted(c["min"]):
+                    t = datetime(dia.year, dia.month, dia.day, h, m).timestamp()
+                    if desde <= t <= ate:
+                        out.append(t)
+        dia += timedelta(days=1)
+    return out[:PROXIMAS_MAX]
+
+
+def _hm(h, m, en=False):
+    if en:
+        return "%02d:%02d" % (h, m)
+    return "%dh" % h if m == 0 else "%dh%02d" % (h, m)
+
+
+DIAS_CURTO_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+DIAS_LONGO_EN = ["every Sunday", "every Monday", "every Tuesday", "every Wednesday", "every Thursday", "every Friday",
+                 "every Saturday"]
+
+
+def agenda_texto(expr, en=False):
+    """Expressão cron -> texto ('dias úteis, de hora em hora, das 8h às 18h'; en=True: 'weekdays, every hour, 08:00 to
+    18:00'); o que não reconhece volta como 'cron <expr>'."""
+    try:
+        c = cron_campos(expr)
+    except (ValueError, TypeError):
+        return "cron %s" % expr if expr else ""
+    p = expr.split()
+    if p[3] != "*":
+        return "cron " + expr
+    e = " and " if en else " e "
+    junta = lambda xs: ", ".join(xs[:-1]) + e + xs[-1] if len(xs) > 1 else xs[0]
+    sem = sorted(c["sem"])
+    if not c["dia_livre"]:
+        if not c["sem_livre"]:
+            return "cron " + expr
+        ds = [str(d) for d in sorted(c["dia"])]
+        dias = ("on day%s %s of the month" % ("s" if len(ds) > 1 else "", junta(ds))) if en else "todo dia %s do mês" % junta(ds)
+    elif c["sem_livre"] or sem == list(range(7)):
+        dias = "every day" if en else "todo dia"
+    elif sem == [1, 2, 3, 4, 5]:
+        dias = "weekdays" if en else "dias úteis"
+    elif sem == [0, 6]:
+        dias = "Saturday and Sunday" if en else "sábado e domingo"
+    elif len(sem) == 1:
+        dias = (DIAS_LONGO_EN if en else DIAS_LONGO)[sem[0]]
+    else:
+        nomes = [(DIAS_CURTO_EN if en else DIAS_CURTO)[d] for d in (sem[1:] + [0] if sem[0] == 0 else sem)]    # domingo por último
+        dias = junta(nomes)
+    hs, ms = sorted(c["hora"]), sorted(c["min"])
+    if len(ms) == 1:
+        m = ms[0]
+        if len(hs) == 1:
+            hora = ("at " if en else "às ") + _hm(hs[0], m, en)
+        elif len(hs) == 24:
+            hora = ("every hour" + (" (at :%02d)" % m if m else "")) if en else ("de hora em hora" + (" (aos %02d min)" % m if m else ""))
+        elif hs == list(range(hs[0], hs[-1] + 1)):
+            hora = ("every hour, %s to %s" if en else "de hora em hora, das %s às %s") % (_hm(hs[0], m, en), _hm(hs[-1], m, en))
+        elif len(hs) <= 6:
+            hora = ("at " if en else "às ") + junta([_hm(h, m, en) for h in hs])
+        else:
+            return "cron " + expr
+    elif len(hs) == 24 and ms[0] == 0 and len(ms) > 1 and 60 % len(ms) == 0 and ms == list(range(0, 60, 60 // len(ms))):
+        hora = ("every %d min" if en else "a cada %d min") % (60 // len(ms))
+    else:
+        return "cron " + expr
+    return "%s, %s" % (dias, hora)
+
 
 def cron_dados():
     jobs = []
@@ -532,7 +664,7 @@ def cron_dados():
         j = ler_json(JOBS)
         jobs = j["jobs"] if isinstance(j, dict) and "jobs" in j else j
     except Exception:
-        problema("jobs.json", "jobs.json do cron ilegível: os jobs agendados não aparecem")
+        problema("jobs.json", "jobs.json do cron ilegível: os jobs agendados não aparecem", "cron jobs.json unreadable: scheduled jobs are not shown")
         return []
     CRON_JOBS_TODOS[:] = jobs          # inclusive os ocultos: o script deles também precisa existir
     jobs = [x for x in jobs if x.get("name") not in JOBS_OCULTOS and not (x.get("name") or "").startswith("avulso-")]   # "avulso-*" = demandas pontuais fora do monitoramento
@@ -549,7 +681,7 @@ def cron_dados():
     except Exception as e:
         # sem o banco, os jobs aparecem sem execuções (nunca "rodando" e fora do feed): avisar na página em vez de engolir o erro
         if os.path.exists(EXEC_DB):      # sem Hermes (colega com os dados de exemplo) o banco não existe: não é problema
-            problema("executions.db", "executions.db do cron ilegível (%s): sem execuções dos jobs" % e)
+            problema("executions.db", "executions.db do cron ilegível (%s): sem execuções dos jobs" % e, "cron executions.db unreadable (%s): no job runs" % e)
     for jid, lst in cron_hist_sala().items():    # completa com o histórico da Sala (o banco do Hermes guarda só uns 2 dias)
         ja = {e.get("started_at") for e in execs.get(jid, [])}
         novos = [e for e in lst if e["started_at"] not in ja]
@@ -619,7 +751,7 @@ def jarvis_estado():
     except Exception as e:
         # falha de leitura do state.db: o Jarvis aparece "disponível", sem derrubar o /api/state
         if os.path.exists(STATE_DB):
-            problema("state.db", "state.db ilegível: Jarvis sem estado e sem \"sem ação\" dos agentes")
+            problema("state.db", "state.db ilegível: Jarvis sem estado e sem \"sem ação\" dos agentes", "state.db unreadable: no Jarvis state and no agent \"no activity\" time")
     return base
 
 
@@ -649,7 +781,7 @@ def sem_acao(modelo, inicio):
         con.close()
     except Exception:
         if os.path.exists(STATE_DB):
-            problema("state.db", "state.db ilegível: sem o tempo \"sem ação\" dos agentes")
+            problema("state.db", "state.db ilegível: sem o tempo \"sem ação\" dos agentes", "state.db unreadable: no agent \"no activity\" time")
     return None
 
 
@@ -697,7 +829,8 @@ def equipe_painel():
     age = int(time.time() - (j.get("updated_at") or 0))
     velho = age > EQUIPE_VELHO_S
     if velho:
-        problema("equipe", "números da equipe do Agidesk defasados (lidos há %d min; job govti-equipe-agidesk)" % (age // 60))
+        problema("equipe", "números da equipe do Agidesk defasados (lidos há %d min; job govti-equipe-agidesk)" % (age // 60),
+                 "Agidesk team numbers are stale (read %d min ago; job govti-equipe-agidesk)" % (age // 60))
     hoje_ok = j.get("dia") == datetime.now().strftime("%Y-%m-%d")
     enc = j.get("encerrados_hoje_total")
     if enc is None and isinstance(j.get("encerrados_hoje"), dict):     # arquivo do formato antigo (por pessoa): só a soma sai daqui
@@ -723,7 +856,8 @@ def vault_painel():
         return None
     agora = time.time(); hoje = datetime.now().strftime("%Y-%m-%d"); total = j.get("total")
     if agora - (j.get("updated_at") or agora) > 1800:
-        problema("vault", "contagem do vault defasada (há %d min; job govti-vault-contagem)" % ((agora - j.get("updated_at")) // 60))
+        problema("vault", "contagem do vault defasada (há %d min; job govti-vault-contagem)" % ((agora - j.get("updated_at")) // 60),
+                 "vault count is stale (%d min old; job govti-vault-contagem)" % ((agora - j.get("updated_at")) // 60))
     hist = j.get("historico") or {}
     antes = sorted(d for d in hist if d < hoje)
     out = {"total": total, "age_s": int(agora - (j.get("updated_at") or agora)),
@@ -907,6 +1041,44 @@ def estado(dias=7):
     for c in crons:
         c["sucesso"] = indice_sucesso([(t, f) for t, f, _ in trab.get(c["id"], [])], jan.get(c["id"], []), corte)
         c["historico_desde"] = ts_local(min(t for t, _, _ in trab[c["id"]]))[:10] if trab.get(c["id"]) else None
+    # tela JOBS: agendamento por extenso, próximas execuções (7 dias), execuções por dia e duração no período
+    ini_dados = min((iso_epoch(e["started_at"]) for _, ex in execs_cron for e in ex if iso_epoch(e.get("started_at"))), default=None)
+    dias_p = [(agora - timedelta(days=i)).date() for i in range(dias - 1, -1, -1)]
+    por_nome = {jb.get("name"): jb for jb in CRON_JOBS_TODOS}
+    for c in crons:
+        sch = (por_nome.get(c["name"]) or {}).get("schedule") or {}
+        expr = sch.get("expr") if sch.get("kind", "cron") == "cron" else None
+        c["agenda_texto"] = agenda_texto(expr) if expr else (sch.get("display") or "")
+        c["agenda_en"] = agenda_texto(expr, en=True) if expr else c["agenda_texto"]      # tela em inglês (?lang=en ou navegador)
+        janelas = jan.get(c["id"], [])
+        prox = []
+        if c["enabled"] is not False and not c["paused"]:
+            try:
+                prox = proximas_execucoes(expr, agora_s, agora_s + PROXIMAS_DIAS * 86400) if expr else []
+            except ValueError:
+                prox = []
+            if not prox:                   # agendamento que não é cron (intervalo) ou ilegível: fica a próxima do jobs.json
+                nx = iso_epoch(c["next_run"])
+                prox = [nx] if nx and agora_s - 3600 <= nx <= agora_s + PROXIMAS_DIAS * 86400 else []
+        c["proximas"] = [[ts_local(t)[:16], bool(em_manutencao(janelas, t))] for t in prox]
+        c["proximas_cortadas"] = len(prox) >= PROXIMAS_MAX
+        por_dia = {d: [0, 0, 0] for d in dias_p}       # [OK, falhas, em manutenção]
+        durs, ult = [], []
+        for t, f, fim in sorted(trab.get(c["id"], []), key=lambda x: x[0] or 0):
+            if not t or t < corte:
+                continue
+            m = bool(em_manutencao(janelas, t))
+            d = datetime.fromtimestamp(t).date()
+            if d in por_dia:
+                por_dia[d][2 if m else 1 if f else 0] += 1
+            if fim and not f and not m:
+                durs.append(fim - t)
+            ult.append([ts_local(t)[:16], round(fim - t) if fim else None, f, m])
+        inicio = datetime.fromtimestamp(ini_dados).date() if ini_dados else None
+        c["diario"] = [por_dia[d] if inicio and d >= inicio else None for d in dias_p]    # None = antes de haver dados
+        c["duracao"] = {"media_s": round(sum(durs) / len(durs)) if durs else None, "max_s": round(max(durs)) if durs else None,
+                        "n": len(durs), "soma_s": round(sum(durs))}
+        c["ultimas"] = ult[-10:][::-1]
     # job que chama um agente: a falha que não chegou ao log de nenhum agente (caiu antes ou fora dele) conta no índice geral
     falhas_log = [ep(e) for e in hist if e["code"] != 0]
     falhas_fora = sum(1 for c in crons if c["chama_agente"] for t, f, fim in trab.get(c["id"], [])
@@ -948,6 +1120,7 @@ def estado(dias=7):
         "custo_usd": round(sum(x["custo_usd"] for x in cst.values()), 2) if cst else None,
         "sucesso": indice_geral(agentes, crons, cat, falhas_fora),
         "eventos_executor": bool(exs),
+        "jobs_dados_desde": ts_local(ini_dados)[:10] if ini_dados else None,
     }
     vigia_saude(agora_s)
     arquivos_faltando(cat, CRON_JOBS_TODOS)
@@ -960,7 +1133,7 @@ def estado(dias=7):
     sem_setor = [i for i, (z, m) in origem.items() if m.startswith("padrão")]
     return {"now": agora.strftime("%Y-%m-%d %H:%M:%S"), "agents": agentes, "crons": crons,
             "feed": feed, "kpis": kp, "layout": layout, "sem_setor": sem_setor, "jarvis": jarvis, "claude_usage": claude_uso(), "vault": vault_painel(), "equipe_estacao": est_equipe, "equipe": equipe,
-            "saude": list(SAUDE), "periodo_dias": dias, "versao": 3}
+            "saude": list(SAUDE), "periodo_dias": dias, "versao": 4}
 
 
 def atividade(agente):
@@ -968,7 +1141,7 @@ def atividade(agente):
     O state.db não registra qual agente abriu a sessão: o vínculo é aproximado, por modelo + horário de início."""
     cat = ler_json(AGENTES)
     if agente not in cat:
-        return {"erro": "agente desconhecido"}
+        return {"erro": "agente desconhecido", "erro_en": "unknown agent"}
     modelo = cat[agente].get("modelo")
     rod = rodando_agora()
     agora = time.time()
@@ -1007,7 +1180,7 @@ def atividade(agente):
         ultima = con.execute("select max(timestamp) from messages where session_id=?", (sid,)).fetchone()[0]
         con.close()
     except Exception as e:
-        return {"erro": "state.db indisponível"}
+        return {"erro": "state.db indisponível", "erro_en": "state.db unavailable"}
     return {"agent": agente, "live": ao_vivo, "total": len(ev), "events": ev[-15:], "sessao": sid[:15],
             "parado_ha_s": int(agora - ultima) if (ao_vivo and ultima) else None}
 

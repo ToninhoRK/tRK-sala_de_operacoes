@@ -30,7 +30,7 @@ main{display:grid;grid-template-columns:1fr 360px;min-height:0;flex:1}
 .stage svg{width:100%;height:100%;display:block;cursor:grab}
 .legend{position:absolute;left:14px;bottom:10px;padding:6px 10px;background:rgba(7,10,15,.82);border:1px solid var(--line);border-radius:3px;pointer-events:none;display:flex;gap:6px 18px;font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;color:var(--muted);flex-wrap:wrap;max-width:75%}
 .legend span{display:flex;align-items:center;gap:6px}
-.legend i{width:10px;height:10px;border-radius:1px;display:inline-block}
+.legend i{width:10px;height:10px;border-radius:1px;display:inline-block} .legend b{font-weight:inherit}   /* <b data-en>: só para a tradução */
 #fit{background:var(--panel);color:var(--muted);border:1px solid var(--line2);font:11px var(--mono);letter-spacing:.12em;padding:5px 10px;border-radius:3px;cursor:pointer}   /* no cabeçalho desde 15/10/2026, ao lado do SOM */
 #fit:hover{color:var(--text);border-color:var(--cyan)}
 #som{background:var(--panel);color:var(--muted);border:1px solid var(--line2);font:11px var(--mono);letter-spacing:.12em;padding:5px 10px;border-radius:3px;cursor:pointer}   /* no cabeçalho desde 15/10/2026: é um ajuste geral, não do mapa */
@@ -149,7 +149,7 @@ aside#lateral>#detail.mais{-webkit-mask-image:linear-gradient(#000 calc(100% - 4
 body.tv #visao{display:none}
 /* modo lista: tabela no lugar da planta */
 #lista{display:none;position:absolute;inset:0;overflow:auto;padding:14px 18px 60px}
-body.lista:not(.tv) #lista{display:block} body.lista:not(.tv) #svg,body.lista:not(.tv) .legend,body.lista:not(.tv) #fit{display:none}
+body.lista:not(.tv) #lista{display:block} body.lista:not(.tv) #svg,body.lista:not(.tv) .legend,body.lista:not(.tv) #fit,body.lista:not(.tv) #t3cv,body.lista:not(.tv) #pxcv{display:none}
 #lista table{width:100%;border-collapse:collapse;font-size:12.5px}
 #lista caption{text-align:left;color:var(--dim);font:11px var(--mono);letter-spacing:.06em;padding:0 0 10px}
 #csv{all:unset;cursor:pointer;margin-left:10px;padding:3px 9px;border:1px solid var(--line2);color:var(--muted);font:10px var(--mono);letter-spacing:.12em} #csv:hover,#csv:focus-visible{color:var(--text);border-color:var(--cyan)}
@@ -243,3 +243,50 @@ body.tv #tvlista{display:flex;flex-direction:column;border-left:1px solid var(--
 #tvrodape h3{margin:0 0 2px;font:600 15px var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
 #tvrodape label{display:block;font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 #tvrodape b{font:600 22px var(--mono);color:var(--text)} #tvrodape b.a{color:var(--amber)} #tvrodape b.r{color:var(--red)}
+
+/* ---- tela JOBS (16/10/2026): indicadores, próximas execuções, histórico em grade e tabela por job ---- */
+#jobs{display:none;position:absolute;inset:0;overflow:auto;padding:14px 18px 60px;background:var(--bg)}
+body.jobs:not(.tv) #jobs{display:block}
+body.jobs:not(.tv) #svg,body.jobs:not(.tv) .legend,body.jobs:not(.tv) #fit,body.jobs:not(.tv) #t3cv,body.jobs:not(.tv) #pxcv{display:none}
+#jobs section{margin:0 0 26px}
+#jobs h3{margin:0 0 10px;font:500 10px var(--mono);letter-spacing:.18em;color:var(--muted);text-transform:uppercase;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+#jobs h3 small{letter-spacing:.04em;text-transform:none;color:var(--dim)}
+#jobs .vz{color:#3E4E5F} #jobs .z{color:#3E4E5F}
+.jkpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+.jkpis>div{background:var(--panel);padding:10px 14px;min-width:0}
+.jkpis label{display:block;font:10px var(--mono);letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
+.jkpis b{display:block;font:600 22px var(--mono);color:var(--text);margin:5px 0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jkpis b.r{color:var(--red)} .jkpis b.g{color:var(--green)} .jkpis b.a{color:var(--amber)} .jkpis b.z{color:#3E4E5F}
+.jkpis span{display:block;font:11px var(--mono);color:var(--dim);line-height:1.35}   /* quebra em 2 linhas em vez de cortar (tela de notebook) */
+.jfila{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.jfila>div{border:1px solid var(--line2);border-radius:3px;padding:6px 10px;font:11.5px var(--mono);color:var(--text);cursor:pointer;background:var(--panel)}
+.jfila>div i{font-style:normal;color:var(--cyan)} .jfila small{color:var(--dim)} .jfila>div:hover{border-color:var(--muted)}
+#jobs table{width:100%;border-collapse:collapse;font-size:12px}
+#jobs caption{text-align:left;color:var(--dim);font:11px var(--mono);letter-spacing:.06em;padding:0 0 10px}
+#jobs caption button{all:unset;cursor:pointer;margin-left:12px;font:10px var(--mono);letter-spacing:.14em;color:var(--muted);border:1px solid var(--line2);padding:3px 8px;border-radius:3px}
+#jobs caption button:hover,#jobs caption button:focus-visible{color:var(--text);border-color:var(--cyan)}
+#jobs th{text-align:left;border-bottom:1px solid var(--line2);padding:6px 8px;font:10px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:400;white-space:nowrap}
+#jobs th button{all:unset;cursor:pointer;display:block} #jobs .jtab th{padding:0} #jobs .jtab th button{padding:6px 8px}
+#jobs th button:hover,#jobs th button:focus-visible{color:var(--text);outline:1px solid var(--cyan)}
+#jobs td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap}
+#jobs td.nm{font-family:var(--mono);color:var(--text);white-space:normal;min-width:120px} #jobs td.nm small{display:block;color:var(--dim);font:10.5px var(--sans);margin-top:2px}
+#jobs td.ag{white-space:normal;color:var(--muted);min-width:140px} #jobs td small{color:var(--dim)} #jobs .jtab td small{display:block} #jobs td.rs{white-space:normal}
+.jrolar{overflow-x:auto;max-width:100%}   /* tela estreita: a tabela rola dentro da caixa, a página não */
+#jobs .jsem td{font:11px var(--mono);color:var(--text)} #jobs .jsem td.vz{color:#3E4E5F}
+#jobs td.mn{color:var(--manut);box-shadow:inset 2px 0 0 var(--manut)}
+#jobs tbody tr{cursor:pointer} #jobs tbody tr:hover{background:rgba(255,255,255,.04)} #jobs tr.sel{background:rgba(43,212,242,.07);box-shadow:inset 3px 0 0 var(--cyan)}
+#jobs tr:focus-visible{outline:1px solid var(--cyan);outline-offset:-1px}
+#jobs .chip.stuck{background:rgba(242,169,59,.14);color:var(--amber);border-color:rgba(242,169,59,.4)}
+.jgrade{display:flex;flex-direction:column;gap:4px}
+.jlin{display:grid;align-items:center;cursor:pointer}
+.jlin .nm{font:11.5px var(--mono);color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:10px}
+.jlin i{display:block;height:14px;border-radius:2px;background:#2A3644}
+.jlin i.ok{background:var(--green)} .jlin i.fa{background:var(--red)} .jlin i.mn{background:var(--manut)}
+.jlin i.sd{background:transparent;box-shadow:inset 0 0 0 1px #1B2633}
+.jlin:hover .nm{color:var(--cyan)}
+.jlin.eixo{cursor:default} .jlin.eixo em{font:9.5px var(--mono);font-style:normal;color:var(--dim);white-space:nowrap;overflow:visible;height:12px;direction:rtl;text-align:right}
+.jleg{display:flex;flex-wrap:wrap;gap:6px 16px;font:10px var(--mono);letter-spacing:.06em;color:var(--dim);margin-top:10px}
+.jleg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px;background:#2A3644}
+.jleg i.ok{background:var(--green)} .jleg i.fa{background:var(--red)} .jleg i.mn{background:var(--manut)} .jleg i.sd{background:transparent;box-shadow:inset 0 0 0 1px #2A3644}
+.jnota{font:11px var(--sans);color:var(--dim);margin:8px 0 0}
+@media (max-width:700px){#jobs{padding:10px 8px 40px} #jobs .jtab th:nth-child(3),#jobs .jtab td:nth-child(3),#jobs .jtab th:nth-child(4),#jobs .jtab td:nth-child(4),#jobs .jtab th:nth-child(10),#jobs .jtab td:nth-child(10),#jobs .jtab th:nth-child(11),#jobs .jtab td:nth-child(11){display:none}}

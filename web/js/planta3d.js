@@ -64,7 +64,7 @@ async function t3Iniciar(){
     requestAnimationFrame(t3Quadro);
   }catch(e){
     T3.erro=String(e&&e.message||e); errPush('3D: '+T3.erro); T3.quer=false; document.body.classList.remove('t3');
-    const f=$('faixa3d')||Object.assign(document.createElement('div'),{id:'faixa3d'}); f.textContent='3D indisponível neste navegador (WebGL): mostrando a planta.';
+    const f=$('faixa3d')||Object.assign(document.createElement('div'),{id:'faixa3d'}); f.textContent=T('3D indisponível neste navegador (WebGL): mostrando a planta.','3D is not available in this browser (WebGL): showing the floor plan.');
     document.querySelector('.stage').appendChild(f); t3Relatorio();
   }
 }

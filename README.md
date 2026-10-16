@@ -10,8 +10,8 @@
 
 ## Sumário
 
-- [Cinco jeitos de ver a mesma operação](#cinco-jeitos-de-ver-a-mesma-operação)
-  - [Planta](#planta-o-dia-a-dia) · [Modo TV](#modo-tv-para-a-parede-da-sala) · [3D](#3d-a-mesma-sala-com-volume) · [Pixel art](#pixel-art-a-mesma-sala-com-cara-de-jogo) · [Lista](#lista-tudo-numa-tabela)
+- [Seis jeitos de ver a mesma operação](#seis-jeitos-de-ver-a-mesma-operação)
+  - [Planta](#planta-o-dia-a-dia) · [Modo TV](#modo-tv-para-a-parede-da-sala) · [3D](#3d-a-mesma-sala-com-volume) · [Pixel art](#pixel-art-a-mesma-sala-com-cara-de-jogo) · [Lista](#lista-tudo-numa-tabela) · [Jobs](#jobs-a-agenda-e-o-histórico-das-rotinas)
 - [O que você enxerga de relance](#o-que-você-enxerga-de-relance)
 - [Destaques](#destaques)
 - [Requisitos](#requisitos)
@@ -25,7 +25,7 @@
 
 ---
 
-## Cinco jeitos de ver a mesma operação
+## Seis jeitos de ver a mesma operação
 
 ### Planta: o dia a dia
 A visão completa para quem acompanha de perto. Cada sala reúne um tipo de agente, e cada mesa mostra o nome do agente e o estado dele. Ao lado ficam o histórico de execuções, o modelo usado e a próxima rodada agendada. Clique numa mesa e veja os detalhes.
@@ -49,6 +49,11 @@ A mesma planta redesenhada em pixels, com contorno em cada móvel e funcionário
 A chave **OFFICE | LISTA** troca a planta por uma tabela com todas as estações: estado, sala, responsável, última execução, execuções do período, índice de sucesso e consumo. Clique no título de uma coluna para ordenar e use **EXPORTAR CSV** para levar os números para a planilha. Uma estação em manutenção aparece em lilás e não dispara alarme.
 
 ![Modo lista: tabela com responsável, índice de sucesso, uma estação em falha e outra em manutenção](docs/sala-lista.png)
+
+### Jobs: a agenda e o histórico das rotinas
+A terceira opção da chave, **JOBS**, reúne só as rotinas agendadas numa página. No topo ficam os indicadores do período: execuções, índice de sucesso, falhas, duração média e a próxima execução, com contagem regressiva. Logo abaixo, as próximas execuções dos próximos 7 dias, calculadas pelo agendamento de cada rotina e escritas por extenso ("dias úteis, de hora em hora, das 8h às 18h"). Depois vem o histórico em grade, um quadradinho por dia: verde, vermelho, lilás para manutenção. Por fim, uma tabela por rotina, ordenável e com **EXPORTAR CSV**.
+
+![Tela JOBS: indicadores dos jobs, próximas execuções da semana, histórico em grade e tabela por rotina](docs/sala-jobs.png)
 
 ---
 
@@ -81,6 +86,7 @@ No topo, um veredito responde antes de tudo: **NORMAL**, **ATENÇÃO** ou **FALH
 - **Nada some sem aviso:** execução que morreu no meio do caminho, sem chegar ao fim, aparece como **INTERROMPIDA**. E se o script de um job ou o prompt de um agente sumir do disco, a sala avisa antes da próxima rodada falhar.
 - **Escritório ou lista:** a chave OFFICE | LISTA no topo alterna entre a planta e as mesmas estações numa tabela ordenável por estado, sala, responsável, última execução, sucesso ou consumo (a visão ativa fica acesa), e o botão **EXPORTAR CSV** leva a tabela para o Excel. Bom para o celular e para achar uma estação rápido. SOM e CENTRALIZAR também ficam no topo, junto com os demais controles.
 - **Fluidez à vista:** o card Operação mostra os quadros por segundo da animação, atualizados a cada segundo (o normal é a taxa da tela: 60 num monitor comum). Número bem abaixo disso indica que a página está pesada para aquela máquina.
+- **Português ou inglês:** a interface inteira segue o idioma do navegador: navegador em português abre em português, qualquer outra língua abre em inglês (datas mm/dd, CSV com vírgula). Para forçar, acrescente `?lang=pt` ou `?lang=en` ao endereço. Nomes de salas e agentes são seus e ficam como você escreveu.
 - **Pelo teclado:** Tab percorre as estações, Enter abre o detalhe e Esc fecha. As estações têm descrição para leitor de tela.
 - **Do seu jeito:** pelo menu **CONFIGURAR** você escolhe o tema, a intensidade da animação, quais rótulos aparecem e se as estações mostram nomes amigáveis ("Consulta AD") ou o id técnico.
 - **A equipe no mesmo lugar (opcional):** chamados em aberto, sem responsável, vencidos e encerrados no Agidesk, e o tempo de atendimento da semana, sempre como total da equipe. Ninguém vira placar individual.

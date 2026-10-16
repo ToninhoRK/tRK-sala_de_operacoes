@@ -261,6 +261,85 @@ class Indicadores(Base):
             for jid, st, ini_s, dur_s in linhas:
                 f.write(json.dumps({"job_id": jid, "job": "", "status": st, "started_at": iso(ini_s), "finished_at": iso(ini_s - dur_s)}) + "\n")
 
+    def test_agenda_e_proximas_execucoes(self):
+        A = server.agenda_texto
+        self.assertEqual(A("20 8-17 * * 1,4"), "seg e qui, de hora em hora, das 8h20 às 17h20")
+        self.assertEqual(A("30 8-17 * * 1-5"), "dias úteis, de hora em hora, das 8h30 às 17h30")
+        self.assertEqual(A("0 12 * * 1-5"), "dias úteis, às 12h")
+        self.assertEqual(A("0 9 * * 1"), "toda segunda-feira, às 9h")
+        self.assertEqual(A("*/15 * * * *"), "todo dia, a cada 15 min")
+        self.assertEqual(A("0 3 1,15 * *"), "todo dia 1 e 15 do mês, às 3h")
+        self.assertEqual(A("30 6 * * 0,6"), "sábado e domingo, às 6h30")
+        self.assertEqual(A("0 9 * 2 *"), "cron 0 9 * 2 *")                       # o que não sabe dizer, mostra a expressão
+        self.assertEqual(A("99 * * * *"), "cron 99 * * * *")                     # inválida não derruba nada
+        E = lambda e: server.agenda_texto(e, en=True)                              # tela em inglês
+        self.assertEqual(E("20 8-17 * * 1,4"), "Mon and Thu, every hour, 08:20 to 17:20")
+        self.assertEqual(E("0 12 * * 1-5"), "weekdays, at 12:00")
+        self.assertEqual(E("0 9 * * 1"), "every Monday, at 09:00")
+        self.assertEqual(E("0 3 1,15 * *"), "on days 1 and 15 of the month, at 03:00")
+        self.assertEqual(E("0 3 5 * *"), "on day 5 of the month, at 03:00")
+        self.assertEqual(E("15 * * * *"), "every day, every hour (at :15)")
+        self.assertEqual(E("0 8,12,18 * * 0,6"), "Saturday and Sunday, at 08:00, 12:00 and 18:00")
+        self.assertEqual(E("0 9 * 2 *"), "cron 0 9 * 2 *")
+        P = server.proximas_execucoes
+        sexta = datetime(2026, 10, 16, 12, 30).timestamp()                        # sexta-feira 12:30
+        semana = sexta + 7 * 86400
+        self.assertEqual([datetime.fromtimestamp(t).strftime("%d %H:%M") for t in P("0 12 * * 1-5", sexta, semana)],
+                         ["19 12:00", "20 12:00", "21 12:00", "22 12:00", "23 12:00"])   # hoje 12:00 já passou
+        self.assertEqual(len(P("20 8-17 * * 1,4", sexta, semana)), 20)            # seg e qui, 10 por dia
+        self.assertEqual(len(P("0 9 * * 1", sexta, semana)), 1)
+        self.assertEqual(P("30 12 * * 5", sexta, semana)[0], sexta)              # no minuto exato conta
+        nov = [datetime.fromtimestamp(t).day for t in P("0 0 1 * 5", datetime(2026, 11, 1).timestamp(), datetime(2026, 11, 30, 23).timestamp())]
+        self.assertEqual(nov, [1, 6, 13, 20, 27])                                  # dia 1 OU sexta (regra do cron), não E
+        self.assertEqual(len(P("* * * * *", sexta, semana)), server.PROXIMAS_MAX)  # teto por job
+        with self.assertRaises(ValueError):
+            P("0 25 * * *", sexta, semana)
+
+    def test_fonte_com_problema_tem_texto_em_ingles(self):
+        import ast
+        arv = ast.parse(open(server.__file__, encoding="utf-8").read())
+        chamadas = [n for n in ast.walk(arv) if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "problema"]
+        self.assertGreater(len(chamadas), 10)
+        sem = [n.lineno for n in chamadas if len(n.args) < 3]
+        self.assertEqual(sem, [], "problema() sem o texto em inglês (linhas do server.py)")
+        server.SAUDE.clear()
+        server.problema("x", "texto", "text")
+        server.problema("y", "só português")
+        self.assertEqual(server.SAUDE, [{"fonte": "x", "msg": "texto", "msg_en": "text"}, {"fonte": "y", "msg": "só português", "msg_en": "só português"}])
+        server.SAUDE.clear()
+
+    def test_tela_jobs(self):
+        agora = datetime.now()
+        f = lambda h: (agora + timedelta(hours=h)).strftime("%Y-%m-%d %H:%M")
+        self.jobs([self.job("rotina", schedule={"kind": "cron", "expr": "0 * * * *"}),
+                   self.job("parada", schedule={"kind": "cron", "expr": "0 * * * *"}, paused_at=iso(60)),
+                   self.job("intervalo", schedule={"kind": "interval", "display": "a cada 2 h"}, next_run_at=iso(-3600))])
+        self.hist_cron([("j-rotina", "completed", 2 * 86400, 60), ("j-rotina", "completed", 2 * 86400 - 600, 120),
+                        ("j-rotina", "failed", 86400, 3), ("j-rotina", "completed", 1800, 90),
+                        ("j-rotina", "completed", 3 * 86400, 1)])                 # 1 s: conferência, fora de tudo
+        self.gravar(server.MANUT, {"janelas": [{"id": "cron:rotina", "de": f(-1), "ate": f(5)}]})
+        s = self.estado(7)
+        c = {x["name"]: x for x in s["crons"]}
+        r = c["rotina"]
+        self.assertEqual(r["agenda_texto"], "todo dia, de hora em hora")
+        self.assertEqual(r["agenda_en"], "every day, every hour")
+        self.assertEqual(c["intervalo"]["agenda_en"], "a cada 2 h")                # sem expressão cron: o texto do jobs.json
+        self.assertIn(len(r["proximas"]), (168, 169))                              # 7 dias de hora em hora
+        self.assertTrue(r["proximas"][0][1] and not r["proximas"][-1][1])          # as das próximas horas caem na janela de manutenção
+        self.assertEqual(len(r["diario"]), 7)
+        self.assertEqual(r["diario"][-1], [0, 0, 1])                               # a de 30 min atrás foi dentro da janela
+        self.assertEqual(r["diario"][-2], [0, 1, 0])
+        self.assertEqual(r["diario"][-3], [2, 0, 0])
+        self.assertIsNone(r["diario"][0])                                          # antes do primeiro registro: sem dados (não é "nada rodou")
+        self.assertEqual(r["duracao"], {"media_s": 90, "max_s": 120, "n": 2, "soma_s": 180})   # só OK e fora da manutenção
+        self.assertEqual(len(r["ultimas"]), 4)
+        self.assertTrue(r["ultimas"][0][3])                                         # a mais recente: em manutenção
+        self.assertEqual(c["parada"]["proximas"], [])                              # pausado não tem próximas
+        self.assertEqual(c["intervalo"]["agenda_texto"], "a cada 2 h")             # agendamento que não é cron: texto do jobs.json
+        self.assertEqual(len(c["intervalo"]["proximas"]), 1)                       # e a próxima do jobs.json
+        self.assertEqual(s["kpis"]["jobs_dados_desde"], (agora - timedelta(days=3)).strftime("%Y-%m-%d"))
+        self.assertEqual(s["versao"], 4)
+
     def test_periodo_e_indice_de_sucesso(self):
         self.log("a", [(ts(40 * 86400), "consulta_a", "m1", 0, False), (ts(10 * 86400), "consulta_a", "m1", 1, False),
                        (ts(2 * 86400), "consulta_a", "m1", 0, False)])

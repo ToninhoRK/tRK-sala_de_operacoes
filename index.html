@@ -10,47 +10,48 @@
 <header>
   <div class="brand">
     <svg width="30" height="30" viewBox="0 0 30 30"><g fill="none" stroke="#2BD4F2" stroke-width="1.3"><path d="M15 3 26 9v12L15 27 4 21V9z"/><path d="M15 15 26 9M15 15 4 9M15 15v12" stroke-opacity=".6"/></g></svg>
-    <div><h1>Sala de Operações</h1><small>Agentes de I.A. · Governança de TI</small></div>
+    <div><h1 data-en="Operations Room">Sala de Operações</h1><small data-en="AI agents · IT Governance">Agentes de I.A. · Governança de TI</small></div>
   </div>
   <div class="sp"></div>
   <div class="clock" id="fps" style="display:none"></div>
   <div class="clock" id="clock"></div>
-  <div class="pill" id="live"><i></i><span>AO VIVO</span></div>
-  <div id="visao" role="group" aria-label="Visão"><button data-v="office" aria-pressed="true" title="O escritório: planta com as estações e os funcionários">OFFICE</button><button data-v="lista" aria-pressed="false" title="As estações numa tabela ordenável (estado, sala, última execução, 7 dias, consumo)">LISTA</button></div>
+  <div class="pill" id="live"><i></i><span data-en="LIVE">AO VIVO</span></div>
+  <div id="visao" role="group" aria-label="Visão" data-en-aria="View"><button data-v="office" aria-pressed="true" title="O escritório: planta com as estações e os funcionários" data-en-title="The office: floor plan with the stations and the employees">OFFICE</button><button data-v="lista" aria-pressed="false" title="As estações numa tabela ordenável (estado, sala, última execução, 7 dias, consumo)" data-en-title="The stations in a sortable table (state, room, last run, period, usage)" data-en="LIST">LISTA</button><button data-v="jobs" aria-pressed="false" title="Os jobs agendados: indicadores, próximas execuções (7 dias), histórico por dia e tabela por job" data-en-title="Scheduled jobs: indicators, upcoming runs (7 days), daily history and a table per job">JOBS</button></div>
   <button id="som">SOM: LIGADO</button>
-  <button id="fit" title="Centralizar a planta inteira na tela (ou duplo clique). Clique na placa de uma sala para aproximar.">CENTRALIZAR</button>
-  <button id="lat" title="Mostrar ou esconder o painel lateral (mais espaço para a planta em telas menores)">PAINEL</button>
-  <button id="cfg" title="Tema (planta, Modo TV, 3D), animação, rótulos e som">CONFIGURAR</button>
+  <button id="fit" title="Centralizar a planta inteira na tela (ou duplo clique). Clique na placa de uma sala para aproximar." data-en-title="Fit the whole floor plan on screen (or double-click). Click a room sign to zoom in." data-en="CENTER">CENTRALIZAR</button>
+  <button id="lat" title="Mostrar ou esconder o painel lateral (mais espaço para a planta em telas menores)" data-en-title="Show or hide the side panel (more room for the floor plan on small screens)" data-en="PANEL">PAINEL</button>
+  <button id="cfg" title="Tema (planta, Modo TV, 3D), animação, rótulos e som" data-en-title="Theme (floor plan, TV mode, 3D), animation, labels, period and sound" data-en="SETTINGS">CONFIGURAR</button>
   <div id="cfgmenu"></div>
 </header>
 <div id="notice"></div>
-<div id="demo">MODO DEMONSTRAÇÃO · DADOS SIMULADOS (remova ?demo=1 da URL para ver os dados reais)</div>
+<div id="demo" data-en="DEMO MODE · SIMULATED DATA (remove ?demo=1 from the URL to see the real data)">MODO DEMONSTRAÇÃO · DADOS SIMULADOS (remova ?demo=1 da URL para ver os dados reais)</div>
 <section class="kpis">
-  <div class="kpi" id="k-op" role="status" aria-live="polite" title="Veredito da operação: FALHA se alguma estação está em falha; ATENÇÃO se há agente sem ação, rotina atrasada ou fonte de dados com problema; senão NORMAL"><label>Operação</label><b id="k-op-v" class="z">—</b><span class="sub" id="k-op-s"></span><span class="sub" id="k-fps" aria-hidden="true" title="Quadros por segundo da animação, medidos neste navegador a cada segundo. O normal é a taxa da tela (60 num monitor comum, até 120 em telas ProMotion); na animação reduzida, cerca de 15. Bem abaixo disso = página pesada para esta máquina.">medindo fps…</span></div>
-  <div class="kpi"><label>Em execução agora</label><b id="k-run" class="z">0</b></div>
-  <div class="kpi" title="Execuções de agentes + jobs agendados sem agente (o job que roda um agente conta uma vez, pelo agente)"><label>Execuções hoje</label><b id="k-today" class="z">0</b><span class="sub" id="k-tend"></span></div>
-  <div class="kpi"><label>Falhas hoje</label><b id="k-err" class="z">0</b><span class="sub" id="k-inerr"></span></div>
-  <div class="kpi"><label>Última atividade</label><b id="k-last" style="font-size:18px;line-height:28px">—</b></div>
-  <div class="kpi" id="k-cs"><label>Claude · 5 h</label><b id="k-cs-v" class="d">—</b><div class="bar"><i id="k-cs-b"></i></div><span class="sub" id="k-cs-s">sem dados</span></div>
-  <div class="kpi" id="k-cw"><label>Claude · semana</label><b id="k-cw-v" class="d">—</b><div class="bar"><i id="k-cw-b"></i></div><span class="sub" id="k-cw-s">sem dados</span></div>
+  <div class="kpi" id="k-op" role="status" aria-live="polite" title="Veredito da operação: FALHA se alguma estação está em falha; ATENÇÃO se há agente sem ação, rotina atrasada ou fonte de dados com problema; senão NORMAL" data-en-title="Operation verdict: FAILURE if any station has failed; ATTENTION if an agent has no activity, a routine is late or a data source has a problem; otherwise NORMAL"><label data-en="Operation">Operação</label><b id="k-op-v" class="z">—</b><span class="sub" id="k-op-s"></span><span class="sub" id="k-fps" aria-hidden="true" title="Quadros por segundo da animação, medidos neste navegador a cada segundo. O normal é a taxa da tela (60 num monitor comum, até 120 em telas ProMotion); na animação reduzida, cerca de 15. Bem abaixo disso = página pesada para esta máquina." data-en-title="Animation frames per second, measured in this browser every second. Normal is the screen rate (60 on a common monitor, up to 120 on ProMotion screens); about 15 with reduced animation. Far below that = the page is heavy for this machine." data-en="measuring fps…">medindo fps…</span></div>
+  <div class="kpi"><label data-en="Running now">Em execução agora</label><b id="k-run" class="z">0</b></div>
+  <div class="kpi" title="Execuções de agentes + jobs agendados sem agente (o job que roda um agente conta uma vez, pelo agente)" data-en-title="Agent runs + scheduled jobs without an agent (a job that runs an agent counts once, through the agent)"><label data-en="Runs today">Execuções hoje</label><b id="k-today" class="z">0</b><span class="sub" id="k-tend"></span></div>
+  <div class="kpi"><label data-en="Failures today">Falhas hoje</label><b id="k-err" class="z">0</b><span class="sub" id="k-inerr"></span></div>
+  <div class="kpi"><label data-en="Last activity">Última atividade</label><b id="k-last" style="font-size:18px;line-height:28px">—</b></div>
+  <div class="kpi" id="k-cs"><label>Claude · 5 h</label><b id="k-cs-v" class="d">—</b><div class="bar"><i id="k-cs-b"></i></div><span class="sub" id="k-cs-s" data-en="no data">sem dados</span></div>
+  <div class="kpi" id="k-cw"><label data-en="Claude · week">Claude · semana</label><b id="k-cw-v" class="d">—</b><div class="bar"><i id="k-cw-b"></i></div><span class="sub" id="k-cw-s" data-en="no data">sem dados</span></div>
 </section>
 <main>
   <div class="stage">
-    <svg id="svg" viewBox="0 0 1040 640" preserveAspectRatio="xMidYMid meet" role="group" aria-label="Planta da sala: use Tab para percorrer as estações e Enter para abrir o detalhe"></svg>
-    <div id="lista" aria-label="Estações em lista"></div>
+    <svg id="svg" viewBox="0 0 1040 640" preserveAspectRatio="xMidYMid meet" role="group" aria-label="Planta da sala: use Tab para percorrer as estações e Enter para abrir o detalhe" data-en-aria="Floor plan: press Tab to go through the stations and Enter to open the details"></svg>
+    <div id="lista" aria-label="Estações em lista" data-en-aria="Stations as a list"></div>
+    <div id="jobs" aria-label="Jobs agendados: indicadores, próximas execuções e histórico" data-en-aria="Scheduled jobs: indicators, upcoming runs and history"></div>
     <div class="legend">
-      <span><i style="background:var(--cyan)"></i>EM EXECUÇÃO</span>
-      <span><i style="background:var(--green)"></i>ÚLTIMA EXEC. OK</span>
-      <span><i style="background:var(--red)"></i>FALHA</span>
-      <span><i style="background:var(--amber)"></i>ATRASADO OU SEM AÇÃO</span>
-      <span><i style="background:var(--idle)"></i>SEM HISTÓRICO</span>
-      <span><i style="background:var(--manut)"></i>MANUTENÇÃO</span>
+      <span><i style="background:var(--cyan)"></i><b data-en="RUNNING">EM EXECUÇÃO</b></span>
+      <span><i style="background:var(--green)"></i><b data-en="LAST RUN OK">ÚLTIMA EXEC. OK</b></span>
+      <span><i style="background:var(--red)"></i><b data-en="FAILED">FALHA</b></span>
+      <span><i style="background:var(--amber)"></i><b data-en="LATE OR NO ACTIVITY">ATRASADO OU SEM AÇÃO</b></span>
+      <span><i style="background:var(--idle)"></i><b data-en="NO HISTORY">SEM HISTÓRICO</b></span>
+      <span><i style="background:var(--manut)"></i><b data-en="MAINTENANCE">MANUTENÇÃO</b></span>
     </div>
   </div>
-  <aside id="tvlista"><h2>Agora</h2><div id="tvitens"></div><div id="tvrodape"></div></aside>
+  <aside id="tvlista"><h2 data-en="Now">Agora</h2><div id="tvitens"></div><div id="tvrodape"></div></aside>
   <aside id="lateral">
-    <div class="sec" id="detail"><h2>Estação</h2><div class="empty">Selecione uma estação (ou o funcionário dela) para ver modelo, histórico e agenda.</div></div>
-    <div class="sec" style="border-bottom:0;padding-bottom:6px"><h2>Atividade recente <span id="feedn"></span></h2><div id="feedf" role="group" aria-label="Filtro da atividade recente"><button data-f="tudo" aria-pressed="true">TUDO</button><button data-f="excecoes" aria-pressed="false">SÓ EXCEÇÕES</button></div></div>
+    <div class="sec" id="detail"><h2 data-en="Station">Estação</h2><div class="empty" data-en="Select a station (or its employee) to see the model, history and schedule.">Selecione uma estação (ou o funcionário dela) para ver modelo, histórico e agenda.</div></div>
+    <div class="sec" style="border-bottom:0;padding-bottom:6px"><h2><span data-en="Recent activity">Atividade recente</span> <span id="feedn"></span></h2><div id="feedf" role="group" aria-label="Filtro da atividade recente" data-en-aria="Recent activity filter"><button data-f="tudo" aria-pressed="true" data-en="ALL">TUDO</button><button data-f="excecoes" aria-pressed="false" data-en="EXCEPTIONS ONLY">SÓ EXCEÇÕES</button></div></div>
     <div id="feedwrap"></div>
   </aside>
 </main>
@@ -61,6 +62,7 @@
 <script src="/web/js/funcionarios.js"></script>
 <script src="/web/js/interface.js"></script>
 <script src="/web/js/lista.js"></script>
+<script src="/web/js/jobs.js"></script>
 <script src="/web/js/diagnostico.js"></script>
 <script src="/web/js/som.js"></script>
 <script src="/web/js/planta3d.js"></script>

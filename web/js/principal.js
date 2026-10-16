@@ -43,12 +43,12 @@ async function atualizarPop(){
   try{
     const r=await fetch('/api/atividade?agent='+encodeURIComponent(POP),{cache:'no-store'}); const a=await r.json(); if(!POP)return;
     let b='';
-    if(a.erro) b='<div class="warn">'+esc(a.erro)+'</div>';
+    if(a.erro) b='<div class="warn">'+esc(EN&&a.erro_en||a.erro)+'</div>';
     else{
-      b+='<div class="meta">'+(a.live?'EM EXECUÇÃO · ':'ÚLTIMA EXECUÇÃO · ')+a.total+' ações'+(a.sessao?'':' · sem sessão encontrada')+'</div>';
-      if(a.parado_ha_s>=120) b+='<div class="meta warn">sem ação há '+Math.round(a.parado_ha_s/60)+' min (ferramenta demorando?)</div>';
-      b+=a.events.map((e,i)=>'<div class="ln'+(i===a.events.length-1?' last':'')+'"><span>'+esc(e.t)+'</span><span>'+esc(e.tool)+'</span></div>').join('')||'<div class="meta">Nenhuma ação registrada.</div>';
-      b+='<div class="meta" style="padding-top:6px">vínculo aproximado (modelo + horário)</div>';
+      b+='<div class="meta">'+(a.live?T('EM EXECUÇÃO · ','RUNNING · '):T('ÚLTIMA EXECUÇÃO · ','LAST RUN · '))+a.total+T(' ações',' actions')+(a.sessao?'':T(' · sem sessão encontrada',' · no session found'))+'</div>';
+      if(a.parado_ha_s>=120) b+='<div class="meta warn">'+T('sem ação há '+Math.round(a.parado_ha_s/60)+' min (ferramenta demorando?)','no activity for '+Math.round(a.parado_ha_s/60)+' min (slow tool?)')+'</div>';
+      b+=a.events.map((e,i)=>'<div class="ln'+(i===a.events.length-1?' last':'')+'"><span>'+esc(e.t)+'</span><span>'+esc(e.tool)+'</span></div>').join('')||'<div class="meta">'+T('Nenhuma ação registrada.','No actions recorded.')+'</div>';
+      b+='<div class="meta" style="padding-top:6px">'+T('vínculo aproximado (modelo + horário)','approximate match (model + time)')+'</div>';
     }
     $('popbd').innerHTML=b;
   }catch(e){}

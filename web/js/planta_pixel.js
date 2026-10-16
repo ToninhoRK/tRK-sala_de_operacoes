@@ -125,7 +125,7 @@ applyVB=function(){P_applyVB(); if(TPX.on)tpxCamera()};
 function tpxFalha(e){
   TPX.erro=String(e&&e.message||e); errPush('Pixel: '+TPX.erro); TPX.quer=false; TPX.on=false; document.body.classList.remove('tpx');
   if(TPX.cv)TPX.cv.style.display='none';
-  const f=$('faixa3d')||Object.assign(document.createElement('div'),{id:'faixa3d'}); f.textContent='Pixel art indisponível neste navegador: mostrando a planta.';
+  const f=$('faixa3d')||Object.assign(document.createElement('div'),{id:'faixa3d'}); f.textContent=T('Pixel art indisponível neste navegador: mostrando a planta.','Pixel art is not available in this browser: showing the floor plan.');
   document.querySelector('.stage').appendChild(f); tpxRelatorio();
 }
 function tpxDono(el){
