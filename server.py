@@ -40,6 +40,9 @@ HIST_CRON = os.environ.get("SALA_HIST_CRON") or os.path.join(HERMES, "data", "sa
 # Janelas de manutenção (manutencao.py): dentro da janela, falha e atraso não alarmam e não contam no índice de sucesso.
 MANUT = os.environ.get("SALA_MANUT") or os.path.join(HERMES, "data", "sala_manutencao.json")
 CONFIG = os.path.expanduser(os.environ.get("SALA_CONFIG", "~/.hermes/data/sala_config.json"))   # responsavel_padrao (opcional)
+# Sinal de vida do vigia_sala.py (gravado no início de cada rodada): parado há mais de 15 min = fonte com problema
+VIGIA = os.environ.get("SALA_VIGIA") or os.path.join(HERMES, "data", "sala_vigia.json")
+VIGIA_ATRASO_S = 900
 PERIODOS = (7, 15, 30, 60, 90)   # dias dos indicadores (tendência, índice de sucesso, consumo), escolhidos no CONFIGURAR
 
 # Layout da planta: gerado a partir de layout.json (setores) + agentes.json. Nada de agente novo fica de fora:
@@ -441,6 +444,42 @@ def janelas_manutencao():
     return out
 
 
+_ACORDOU = [0.0, None]
+
+
+def acordou_ha():
+    """Segundos desde que o Mac acordou (sysctl kern.waketime); None fora do macOS ou se não der para ler. Cache de 30 s."""
+    agora = time.time()
+    if agora - _ACORDOU[0] > 30:
+        _ACORDOU[0], _ACORDOU[1] = agora, None
+        try:
+            r = subprocess.run(["sysctl", "-n", "kern.waketime"], capture_output=True, text=True, timeout=2).stdout
+            m = re.search(r"sec = (\d+)", r)
+            if m and int(m.group(1)) > 0:
+                _ACORDOU[1] = int(m.group(1))
+        except Exception:
+            pass
+    return agora - _ACORDOU[1] if _ACORDOU[1] else None
+
+
+def vigia_saude(agora_s):
+    """Vigia parado (sem aviso por e-mail nem histórico novo dos jobs) ou com erro na última rodada vira fonte com problema.
+    Sem o arquivo (instalação sem vigia) não é problema. Logo depois de o Mac acordar, espera o vigia rodar (10 min)."""
+    try:
+        v = ler_json(VIGIA)
+    except FileNotFoundError:
+        return
+    except Exception:
+        problema("vigia", "sala_vigia.json ilegível")
+        return
+    idade = agora_s - (v.get("rodou_em") or 0)
+    acordou = acordou_ha()
+    if idade > VIGIA_ATRASO_S and not (acordou is not None and acordou < 600):
+        problema("vigia", "o vigia da Sala não roda há %d min: sem aviso por e-mail e sem histórico novo dos jobs" % (idade // 60))
+    elif v.get("erro"):
+        problema("vigia", "vigia da Sala: %s" % v["erro"])
+
+
 def em_manutencao(janelas, t):
     return next((w for w in janelas if w[0] <= t <= w[1]), None)
 
@@ -689,11 +728,13 @@ def estado_json(dias=7):
         return corpo
 
 
-def indice_geral(agentes, crons, cat):
-    """Índice de sucesso de toda a operação no período: agentes + jobs SEM agente (o job que roda um agente conta pelo agente)."""
-    itens = agentes + [c for c in crons if not c["chama_agente"] and not any(v.get("cron_job") == c["name"] for v in cat.values())]
-    n = sum(x["sucesso"]["execucoes"] for x in itens)
-    f = sum(x["sucesso"]["falhas"] for x in itens)
+def indice_geral(agentes, crons, cat, falhas_fora=0):
+    """Índice de sucesso de toda a operação no período, sem contar a mesma execução duas vezes: agentes (com as rodadas do job
+    ligado por \"cron_job\" que não passa pelo agente) + jobs sem agente + falhas de job que chama agente sem registro no log."""
+    ligados = {v.get("cron_job") for v in cat.values() if v.get("cron_job")}
+    itens = agentes + [c for c in crons if not c["chama_agente"] and c["name"] not in ligados]
+    n = sum(x["sucesso"]["execucoes"] for x in itens) + falhas_fora
+    f = sum(x["sucesso"]["falhas"] for x in itens) + falhas_fora
     return {"execucoes": n, "falhas": f, "pct": round(100.0 * (n - f) / n, 1) if n else None}
 
 
@@ -824,13 +865,25 @@ def estado(dias=7):
             x["atrasado_s"], x["antigo"] = None, False
     # índice de sucesso no período (fora das janelas de manutenção): agentes pelo log; jobs pelas execuções que trabalharam ou falharam
     corte = agora_s - dias * 86400
+    trab = {cid: [(iso_epoch(e["started_at"]), e["status"] == "failed", iso_epoch(e.get("finished_at"))) for e in ex
+                  if e.get("started_at") and (e["status"] == "failed" or dur(e) > 5)] for cid, ex in execs_cron}
+    ep = lambda e: time.mktime(time.strptime(e["ts"], "%Y-%m-%d %H:%M:%S"))
     for a in agentes:
-        a["sucesso"] = indice_sucesso([(time.mktime(time.strptime(e["ts"], "%Y-%m-%d %H:%M:%S")), e["code"] != 0) for e in por.get(a["id"], [])],
-                                      jan.get(a["id"], []), corte)
-    for cid, ex in execs_cron:
-        c = next(x for x in crons if x["id"] == cid)
-        c["sucesso"] = indice_sucesso([(iso_epoch(e["started_at"]), e["status"] == "failed") for e in ex
-                                       if e.get("started_at") and (e["status"] == "failed" or dur(e) > 5)], jan.get(cid, []), corte)
+        execs = [(ep(e), e["code"] != 0) for e in por.get(a["id"], [])]
+        job = cat.get(a["id"], {}).get("cron_job")
+        c = next((x for x in crons if x["name"] == job), None) if job else None
+        if c and not c["chama_agente"]:         # job que faz o trabalho do agente sem passar por ele: as rodadas dele são do agente
+            execs += [(t, f) for t, f, _ in trab.get(c["id"], [])]
+        a["sucesso"] = indice_sucesso(execs, jan.get(a["id"], []), corte)
+        a["historico_desde"] = min([ts_local(t)[:10] for t, _ in execs] or [None]) if execs else None
+    for c in crons:
+        c["sucesso"] = indice_sucesso([(t, f) for t, f, _ in trab.get(c["id"], [])], jan.get(c["id"], []), corte)
+        c["historico_desde"] = ts_local(min(t for t, _, _ in trab[c["id"]]))[:10] if trab.get(c["id"]) else None
+    # job que chama um agente: a falha que não chegou ao log de nenhum agente (caiu antes ou fora dele) conta no índice geral
+    falhas_log = [ep(e) for e in hist if e["code"] != 0]
+    falhas_fora = sum(1 for c in crons if c["chama_agente"] for t, f, fim in trab.get(c["id"], [])
+                      if f and t >= corte and not em_manutencao(jan.get(c["id"], []), t)
+                      and not any(t - 5 <= x <= (fim or t) + 60 for x in falhas_log))
     try:
         resp_padrao = ler_json(CONFIG).get("responsavel_padrao")
     except Exception:
@@ -865,9 +918,10 @@ def estado(dias=7):
         "last_activity": feed[0]["ts"] if feed else None,
         "tendencia": tend,
         "custo_usd": round(sum(x["custo_usd"] for x in cst.values()), 2) if cst else None,
-        "sucesso": indice_geral(agentes, crons, cat),
+        "sucesso": indice_geral(agentes, crons, cat, falhas_fora),
         "eventos_executor": bool(exs),
     }
+    vigia_saude(agora_s)
     est_equipe, equipe = equipe_painel()
     layout, origem = montar_layout(cat, [c["id"] for c in crons], [p["id"] for p in est_equipe])
     jarvis = jarvis_estado()

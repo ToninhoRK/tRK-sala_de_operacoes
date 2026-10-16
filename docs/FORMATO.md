@@ -146,7 +146,10 @@ Hermes; sem ele, o job aparece só com o estado do `jobs.json`.
 - `sala_manutencao.json` (gravado pelo `manutencao.py`): `{"janelas": [{"id": "agente ou cron:<job>", "de": "AAAA-MM-DD HH:MM",
   "ate": "AAAA-MM-DD HH:MM", "motivo": "..."}]}`. Dentro da janela, a estação aparece como MANUTENÇÃO, falha e atraso não
   alarmam e as execuções ficam fora do índice de sucesso. Janelas encerradas há mais de 120 dias são descartadas.
-- `sala_alerta_base.json` (gravado pelo `vigia_sala.py`): o retrato da rodada anterior, para o e-mail sair só quando algo muda.
+- `sala_alerta_base.json` (gravado pelo `vigia_sala.py`): o retrato da rodada anterior, para o e-mail sair só quando algo muda,
+  e a hora do último aviso de cada estação (no máximo um aviso de problema por estação a cada 30 min).
+- `sala_vigia.json` (gravado pelo `vigia_sala.py` no início de cada rodada): `{"rodou_em": <unix>, "erro": null}`. Mais de
+  15 min sem rodar (fora os 10 min depois de o Mac acordar) ou `erro` preenchido = "fonte com problema" na sala.
 
 ## Configuração local: `sala_config.json`
 

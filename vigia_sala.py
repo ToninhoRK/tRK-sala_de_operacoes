@@ -11,6 +11,10 @@
    rodada só grava a base (ligar o vigia não dispara e-mail pelos problemas antigos). Só metadados (nome, estado, hora):
    nunca a resposta de um agente. Um destinatário só. Envio pelo himalaya (conta do config). Se o envio falhar, a base não
    avança (a rodada seguinte tenta de novo) e o vigia sai com código 1.
+   No máximo um aviso de problema por estação a cada 30 min (estação que oscila não vira uma enxurrada): o que acontecer
+   dentro desse intervalo fica guardado e sai na primeira rodada depois dele. "Voltou ao normal" não espera.
+3. Sinal de vida: ~/.hermes/data/sala_vigia.json (rodou_em, erro). A Sala acusa "fonte com problema" se o vigia ficar mais
+   de 15 min sem rodar ou se a última rodada deu erro.
 
 Uso: python3 vigia_sala.py            (silencioso quando não há novidade)
      python3 vigia_sala.py --teste    (manda um e-mail de teste pela conta configurada e sai)
@@ -32,6 +36,7 @@ sys.path.insert(0, AQUI)
 import server  # noqa: E402  (a mesma leitura do painel)
 
 BASE = os.environ.get("SALA_ALERTA_BASE") or os.path.join(server.HERMES, "data", "sala_alerta_base.json")
+INTERVALO_AVISO_S = 1800      # um aviso de problema por estação a cada 30 min, no máximo
 GUARDA_DIAS = 100
 ENDERECO_SALA = "http://127.0.0.1:8765"
 
@@ -141,7 +146,7 @@ def eventos(a, b):
                 or (p["stuck"] and not c["stuck"] and c["st"] != "error"):
             ev.append(("volta", i))
     for f in b["saude"]:
-        if f not in a["saude"]:
+        if f not in a["saude"] and f != "vigia":       # o próprio vigia está rodando: o aviso dele é só para a página
             ev.append(("fonte", f))
     return ev
 
@@ -192,6 +197,34 @@ def enviar(cfg, assunto, corpo):
     return r.returncode == 0, (r.stderr or r.stdout).decode("utf8", "ignore").strip()[:300]
 
 
+def sinal_de_vida(erro=None):
+    try:
+        gravar_atomico(server.VIGIA, json.dumps({"rodou_em": time.time(), "erro": erro}, ensure_ascii=False))
+    except Exception as e:
+        print("sinal de vida: não gravou (%s)" % e)
+
+
+def separar(ev, a, b, agora):
+    """Aplica o limite de 1 aviso de problema por estação a cada 30 min. Devolve (eventos a enviar, retrato a gravar):
+    a estação adiada fica com o retrato antigo, para a novidade aparecer de novo quando o intervalo passar."""
+    avisado = dict(a.get("avisado") or {})
+    enviar_ev, adiados = [], []
+    for t, i in ev:
+        chave = "saude:" + i if t == "fonte" else i
+        if t != "volta" and agora - avisado.get(chave, 0) < INTERVALO_AVISO_S:
+            adiados.append((t, i))
+            continue
+        enviar_ev.append((t, i))
+    gravar = json.loads(json.dumps(b))
+    for t, i in adiados:
+        if t == "fonte":
+            gravar["saude"].pop(i, None)
+        elif i in a["it"]:
+            gravar["it"][i] = a["it"][i]
+    gravar["avisado"] = avisado
+    return enviar_ev, gravar
+
+
 def main(argv=()):
     if "--teste" in argv:
         cfg = config_email()
@@ -203,12 +236,14 @@ def main(argv=()):
         print("e-mail de teste enviado para %s" % cfg["para"] if ok else "o e-mail de teste NÃO saiu (%s)" % msg)
         return 0 if ok else 1
     codigo = 0
+    sinal_de_vida()
     try:
         n = coletar_historico()
         if n:
             print("%s histórico: +%d execução(ões) de job" % (datetime.now().strftime("%Y-%m-%d %H:%M"), n))
     except Exception as e:
         print("histórico dos jobs: falhou (%s)" % e)
+        sinal_de_vida("o histórico dos jobs não foi gravado (%s)" % e)
         codigo = 1
     cfg = config_email()
     if not cfg:
@@ -226,15 +261,20 @@ def main(argv=()):
         gravar_atomico(BASE, json.dumps(b, ensure_ascii=False))
         print("alerta: base inicial gravada (nenhum e-mail na primeira rodada)")
         return codigo
-    ev = eventos(a, b)
+    agora = time.time()
+    ev, gravar = separar(eventos(a, b), a, b, agora)
     if ev:
         assunto, corpo = mensagem(ev, b)
         ok, msg = enviar(cfg, assunto, corpo)
         if not ok:
             print("alerta: o e-mail NÃO saiu (%s); tento de novo na próxima rodada" % msg)
+            sinal_de_vida("o último e-mail de aviso não saiu (%s)" % msg[:120])
             return 1
+        for t, i in ev:
+            if t != "volta":
+                gravar["avisado"]["saude:" + i if t == "fonte" else i] = agora
         print("%s alerta enviado: %s" % (datetime.now().strftime("%Y-%m-%d %H:%M"), assunto))
-    gravar_atomico(BASE, json.dumps(b, ensure_ascii=False))
+    gravar_atomico(BASE, json.dumps(gravar, ensure_ascii=False))
     return codigo
 
 

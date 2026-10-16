@@ -30,7 +30,7 @@ class Base(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="sala_teste_")
         self.orig = {k: getattr(server, k) for k in ("AGENTES", "LOGS", "JOBS", "EXEC_DB", "STATE_DB", "EQUIPE_JSON",
                                                       "VAULT_CONT", "CLAUDE_USO", "rodando_agora", "sem_acao",
-                                                      "HIST_CRON", "MANUT", "CONFIG")}
+                                                      "HIST_CRON", "MANUT", "CONFIG", "VIGIA", "acordou_ha", "chama_agente")}
         os.makedirs(os.path.join(self.tmp, "logs"))
         server.AGENTES = os.path.join(self.tmp, "agentes.json")
         server.LOGS = os.path.join(self.tmp, "logs")
@@ -43,6 +43,8 @@ class Base(unittest.TestCase):
         server.HIST_CRON = os.path.join(self.tmp, "historico_cron.jsonl")
         server.MANUT = os.path.join(self.tmp, "manutencao.json")
         server.CONFIG = os.path.join(self.tmp, "sala_config.json")
+        server.VIGIA = os.path.join(self.tmp, "sala_vigia.json")
+        server.acordou_ha = lambda: None
         server._CUSTO.clear()
         server.rodando_agora = lambda: dict(self.rodando)
         server.sem_acao = lambda modelo, inicio: self.sem_acao
@@ -314,6 +316,37 @@ class Indicadores(Base):
         self.assertEqual(next(x for x in s["agents"] if x["id"] == "consulta_b")["status"], "error")
         self.assertTrue(any(x["fonte"] == "manutenção" for x in s["saude"]))     # data inválida: avisa, não quebra
 
+    def test_indice_sem_contar_duas_vezes(self):
+        """Job ligado por cron_job que não passa pelo agente: rodadas dele são do agente. Job que chama agente: só a falha que
+        não chegou ao log de nenhum agente entra no índice geral (a outra já está no log)."""
+        server.chama_agente = lambda script: script == "roda_agente.py"
+        self.catalogo({"auditoria": {"modelo": "m", "cron_job": "aud-job"}, "consulta_b": {"modelo": "m2"}})
+        self.jobs([self.job("aud-job"), self.job("rateio", script="roda_agente.py")])
+        self.log("a", [(ts(3600), "auditoria", "m", 0, False)])
+        self.log("b", [(ts(7200 - 30), "consulta_b", "m2", 1, False)])       # falha do agente chamado pelo job de 2 h atrás
+        self.hist_cron([("j-aud-job", "completed", 5000, 60), ("j-aud-job", "failed", 9000, 60),
+                        ("j-rateio", "failed", 7200, 60), ("j-rateio", "failed", 20000, 60)])   # a 2ª falha não está no log
+        s = self.estado()
+        a = {x["id"]: x for x in s["agents"] + s["crons"]}
+        self.assertEqual((a["auditoria"]["sucesso"]["execucoes"], a["auditoria"]["sucesso"]["falhas"]), (3, 1))
+        self.assertEqual((a["cron:aud-job"]["sucesso"]["execucoes"], a["cron:rateio"]["sucesso"]["falhas"]), (2, 2))
+        g = s["kpis"]["sucesso"]                                                   # auditoria 3 (1 falha) + consulta_b 1 (1 falha) + 1 falha fora do log
+        self.assertEqual((g["execucoes"], g["falhas"]), (5, 3))
+        self.assertEqual(a["cron:aud-job"]["historico_desde"], ts(9000)[:10])
+
+    def test_vigia_parado_vira_fonte_com_problema(self):
+        f = lambda: [x["fonte"] for x in self.estado()["saude"]]
+        self.assertNotIn("vigia", f())                                              # sem vigia instalado: não é problema
+        self.gravar(server.VIGIA, {"rodou_em": time.time() - 60, "erro": None})
+        self.assertNotIn("vigia", f())
+        self.gravar(server.VIGIA, {"rodou_em": time.time() - 3600, "erro": None})
+        self.assertIn("vigia", f())
+        server.acordou_ha = lambda: 120                                             # Mac acabou de acordar: espera o vigia rodar
+        self.assertNotIn("vigia", f())
+        server.acordou_ha = lambda: None
+        self.gravar(server.VIGIA, {"rodou_em": time.time(), "erro": "o último e-mail de aviso não saiu"})
+        self.assertIn("vigia", f())
+
     def test_responsavel(self):
         self.catalogo({"consulta_a": {"modelo": "m1", "responsavel": "Pessoa B"}, "consulta_b": {"modelo": "m2"}})
         self.jobs([self.job()])
@@ -356,7 +389,8 @@ class Vigia(Base):
     def vigia(self):
         import subprocess
         env = dict(os.environ, HOME=self.tmp, SALA_AGENTES=server.AGENTES, SALA_JOBS=server.JOBS, SALA_HIST_CRON=server.HIST_CRON,
-                   SALA_MANUT=server.MANUT, SALA_CONFIG=server.CONFIG, SALA_ALERTA_BASE=os.path.join(self.tmp, "base.json"))
+                   SALA_MANUT=server.MANUT, SALA_CONFIG=server.CONFIG, SALA_ALERTA_BASE=os.path.join(self.tmp, "base.json"),
+                   SALA_VIGIA=server.VIGIA)
         return subprocess.run([sys.executable, os.path.join(AQUI, "vigia_sala.py")], env=env, capture_output=True, text=True)
 
     def emails(self):
@@ -396,13 +430,46 @@ class Vigia(Base):
         self.log("b", [(ts(4), "consulta_b", "m2", 1, False)])
         self.vigia()
         self.assertEqual(len(self.emails()), 2)
-        # envio falhou: código 1 e a mesma novidade vai na rodada seguinte
+        # envio falhou: código 1 e a mesma novidade vai na rodada seguinte (30 min depois do último aviso da estação)
+        b = json.load(open(os.path.join(self.tmp, "base.json"), encoding="utf8"))
+        b["avisado"]["consulta_a"] -= 1801
+        json.dump(b, open(os.path.join(self.tmp, "base.json"), "w", encoding="utf8"))
         open(os.path.join(self.tmp, "falhar"), "w").close()
         self.log("a", [(ts(3), "consulta_a", "m1", 5, False)])
         self.assertEqual(self.vigia().returncode, 1)
         os.remove(os.path.join(self.tmp, "falhar"))
         self.assertEqual(self.vigia().returncode, 0)
         self.assertIn("Subject: [Sala] FALHA: consulta_a", self.emails()[2])
+
+    def test_um_aviso_por_estacao_a_cada_30_min(self):
+        base = os.path.join(self.tmp, "base.json")
+        L = [(ts(3600), "consulta_a", "m1", 0, False)]
+        self.log("a", L); self.vigia()
+        L.append((ts(300), "consulta_a", "m1", 2, False)); self.log("a", L); self.vigia()      # falha: avisa
+        L.append((ts(200), "consulta_a", "m1", 0, False)); self.log("a", L); self.vigia()      # voltou: avisa na hora
+        L.append((ts(100), "consulta_a", "m1", 3, False)); self.log("a", L); self.vigia()      # falhou de novo em < 30 min: espera
+        e = self.emails()
+        self.assertEqual([x.split("Subject: ")[1].split("\n")[0] for x in e], ["[Sala] FALHA: consulta_a", "[Sala] Normalizado: consulta_a"])
+        self.vigia()
+        self.assertEqual(len(self.emails()), 2)                                                 # continua esperando
+        b = json.load(open(base, encoding="utf8"))
+        b["avisado"]["consulta_a"] -= 1801                                                      # passaram os 30 min
+        json.dump(b, open(base, "w", encoding="utf8"))
+        self.vigia()
+        self.assertIn("Subject: [Sala] FALHA: consulta_a", self.emails()[2])                   # a falha guardada sai agora
+
+    def test_sinal_de_vida(self):
+        self.vigia()
+        v = json.load(open(server.VIGIA, encoding="utf8"))
+        self.assertLess(time.time() - v["rodou_em"], 60)
+        self.assertIsNone(v["erro"])
+        self.log("a", [(ts(60), "consulta_a", "m1", 0, False)])
+        self.vigia()                                                                            # (base)
+        open(os.path.join(self.tmp, "falhar"), "w").close()
+        self.log("a", [(ts(5), "consulta_a", "m1", 4, False)])
+        self.vigia()
+        self.assertIn("não saiu", json.load(open(server.VIGIA, encoding="utf8"))["erro"])
+        self.assertIn("vigia", [x["fonte"] for x in self.estado()["saude"]])                    # a Sala acusa
 
     def test_email_de_teste(self):
         import subprocess

@@ -155,7 +155,7 @@ function renderDetail(){
     add('Skills',esc((it.skills||[]).join(', ')||'—')); add('Turnos máx.',esc(it.max_turns??'—'));
     add('Execuções',`${it.runs_today} hoje · ${it.runs_total} no histórico`);
     add('Últimos '+P+' dias',spark(it.tendencia)+'<br><span style="color:var(--dim)">'+tendTxt(it.tendencia)+'</span>');
-    add('Sucesso '+P+' d',sucTxt(it.sucesso));
+    add('Sucesso '+P+' d',sucTxt(it.sucesso)+desdeTxt(it,P));
     const c=it.custo; add('Consumo '+P+' d',c?fmtTok(c.tokens)+' tokens · '+c.execucoes+' exec.'+(c.custo_usd>0?' · US$ '+c.custo_usd.toFixed(2):'')+'<br><span style="color:var(--dim)">'+(c.custo_usd>0?'custo estimado pelo Hermes':'custo estimado US$ 0 (modelo gratuito ou por assinatura)')+(c.aprox?'; parte com vínculo aproximado (execuções anteriores ao registro de início e fim)':'')+'</span>':'—');
     if(it.cadencia_h)add('Cadência','a cada '+(it.cadencia_h%24?it.cadencia_h+' h':(it.cadencia_h/24)+' dia'+(it.cadencia_h>24?'s':''))+(it.dias_uteis?' útil':'')+(atrasado(it)?' · <span style="color:var(--amber)">atrasado há '+fmtAtraso(it.atrasado_s).toLowerCase()+'</span>':' · em dia'));
     if(it.status==='running')add('Rodando há',mmss(it.elapsed_s||0)+' <span style="color:var(--dim)">(limite '+Math.round((it.timeout_s||1800)/60)+' min)</span>'+(it.sem_acao_s!=null?'<br>última ação há '+mmss(it.sem_acao_s)+(it.sem_acao_s>=300?' <span style="color:var(--amber)">sem ação: ferramenta demorando ou travado</span>':''):''));
@@ -179,13 +179,16 @@ function renderDetail(){
     add('Última',it.last_run?fmtTs(it.last_run.replace('T',' ').slice(0,19))+' · '+esc(it.last_status||''):'—');
     add('Checagens hoje',`${it.checks_today}${it.failed_today?' · '+it.failed_today+' com falha':''}`);
     add('Últimos '+P+' dias',spark(it.tendencia)+'<br><span style="color:var(--dim)">'+tendTxt(it.tendencia)+' (só as que trabalharam ou falharam)</span>');
-    add('Sucesso '+P+' d',sucTxt(it.sucesso));
+    add('Sucesso '+P+' d',sucTxt(it.sucesso)+desdeTxt(it,P));
   }
   const rec=(it.recent||[]).slice(0,5).map(e=>`<div class="mini"><span>${fmtTs(e.ts)}</span><span>${modelShort(e.model)}${e.dur!=null?' · '+fmtDur(e.dur):''}</span><span style="color:var(--${e.code?'red':'green'})">${e.code?(e.interrompida?'INTERR.':'ERRO'):'OK'}</span></div>`).join('');
   d.innerHTML=`<h2>Estação <span>${it.kind==='cron'?'AGENDADOR':(it.kind==='jarvis'?'HERMES PRINCIPAL':(it.kind==='equipe'?'EQUIPE AGIDESK':'AGENTE'))}</span></h2>
     <div class="nm">${esc(it.kind==='equipe'?it.name:label(it.id))} <span class="chip ${it.status}">${(it.kind==='jarvis'?JSTL:STL)[it.status]}</span></div>
     <div class="ds">${esc(it.desc)}</div><dl>${rows}</dl>${it.kind==='equipe'?'<div class="ds" style="margin-top:8px">Só totais da equipe: a Sala não mostra números por pessoa.</div>':''}${rec?'<h2 style="margin:14px 0 4px">Últimas execuções</h2>'+rec:''}`;
 }
+// período maior que o histórico disponível: diz desde quando há dados (jobs: a Sala guarda o histórico desde a instalação do vigia)
+function desdeTxt(it,P){const d=it.historico_desde;if(!d)return '';const ini=new Date(Date.now()-(P-1)*864e5);ini.setHours(0,0,0,0);
+  return new Date(d+'T00:00:00')>ini?'<br><span style="color:var(--dim)">histórico desde '+d.slice(8,10)+'/'+d.slice(5,7)+'</span>':''}
 /* Modo TV: coluna "AGORA" em letra grande, só com o que importa de longe (falha, sem ação, rodando) e os totais */
 function renderTV(){
   if(!temaTV(CFG.tema)||!STATE)return;
