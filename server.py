@@ -34,6 +34,13 @@ if not os.path.exists(AGENTES):
     AGENTES = os.path.join(EXEMPLO, "agentes.json")
 if not os.path.exists(JOBS):
     JOBS = os.path.join(EXEMPLO, "cron_jobs.json")
+# Histórico próprio da Sala para os jobs: o executions.db do Hermes guarda só as últimas ~1000 execuções (uns 2 dias, com os
+# jobs de 5 em 5 min). Gravado pelo vigia_sala.py a cada 5 min: só execuções que trabalharam (> 5 s) ou falharam, até 100 dias.
+HIST_CRON = os.environ.get("SALA_HIST_CRON") or os.path.join(HERMES, "data", "sala_historico_cron.jsonl")
+# Janelas de manutenção (manutencao.py): dentro da janela, falha e atraso não alarmam e não contam no índice de sucesso.
+MANUT = os.environ.get("SALA_MANUT") or os.path.join(HERMES, "data", "sala_manutencao.json")
+CONFIG = os.path.expanduser(os.environ.get("SALA_CONFIG", "~/.hermes/data/sala_config.json"))   # responsavel_padrao (opcional)
+PERIODOS = (7, 15, 30, 60, 90)   # dias dos indicadores (tendência, índice de sucesso, consumo), escolhidos no CONFIGURAR
 
 # Layout da planta: gerado a partir de layout.json (setores) + agentes.json. Nada de agente novo fica de fora:
 # quem não casa com nenhum setor vai para a sala padrão ("NOVOS AGENTES").
@@ -297,7 +304,7 @@ def ts_local(t):
     return datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M:%S")
 
 
-_CUSTO = [0.0, {}]
+_CUSTO = {}     # dias -> (instante do cálculo, custos)
 
 
 def custos(hist, exs, dias=7):
@@ -394,6 +401,65 @@ def atraso_job(jb, rodando, agora=None):
 
 JOBS_OCULTOS = {"govti-vault-contagem", "govti-equipe-agidesk"}   # jobs de apoio da própria Sala (contagem da placa da Diretoria; números da sala GOVERNANÇA): rodam a cada 5 min e não aparecem nem no feed
 
+def cron_hist_sala():
+    """Execuções de jobs guardadas pela própria Sala (vigia_sala.py): {job_id: [execução, ...]}. Sem o arquivo = vazio."""
+    out = {}
+    try:
+        with open(HIST_CRON, encoding="utf8") as f:
+            for l in f:
+                try:
+                    d = json.loads(l)
+                    out.setdefault(d["job_id"], []).append({"job_id": d["job_id"], "status": d["status"], "pid": None,
+                                                            "started_at": d["started_at"], "finished_at": d.get("finished_at"), "error": None})
+                except Exception:
+                    continue
+    except FileNotFoundError:
+        pass
+    except Exception:
+        problema("histórico da Sala", "histórico próprio dos jobs ilegível: indicadores dos jobs só com os últimos ~2 dias")
+    return out
+
+
+def janelas_manutencao():
+    """{id da estação: [(início, fim, motivo)]} do sala_manutencao.json (gravado pelo manutencao.py). Sem o arquivo = nenhuma."""
+    try:
+        d = ler_json(MANUT)
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        problema("manutenção", "sala_manutencao.json ilegível: janelas de manutenção ignoradas")
+        return {}
+    out = {}
+    for j in (d.get("janelas") or []) if isinstance(d, dict) else []:
+        try:
+            ini = time.mktime(time.strptime(j["de"], "%Y-%m-%d %H:%M"))
+            fim = time.mktime(time.strptime(j["ate"], "%Y-%m-%d %H:%M"))
+        except Exception:
+            problema("manutenção", "janela de manutenção com data inválida (%s): ignorada" % j.get("id"))
+            continue
+        out.setdefault(j.get("id"), []).append((ini, fim, j.get("motivo") or ""))
+    return out
+
+
+def em_manutencao(janelas, t):
+    return next((w for w in janelas if w[0] <= t <= w[1]), None)
+
+
+def indice_sucesso(execs, janelas, corte):
+    """Índice de sucesso no período: [(instante, falhou)] desde `corte` -> execuções, falhas, % OK.
+    Execução dentro de janela de manutenção fica de fora (conta só em \"manutencao\")."""
+    n = f = fora = 0
+    for t, falhou in execs:
+        if t < corte:
+            continue
+        if em_manutencao(janelas, t):
+            fora += 1
+            continue
+        n += 1
+        f += bool(falhou)
+    return {"execucoes": n, "falhas": f, "pct": round(100.0 * (n - f) / n, 1) if n else None, "manutencao": fora}
+
+
 def cron_dados():
     jobs = []
     try:
@@ -417,6 +483,12 @@ def cron_dados():
         # sem o banco, os jobs aparecem sem execuções (nunca "rodando" e fora do feed): avisar na página em vez de engolir o erro
         if os.path.exists(EXEC_DB):      # sem Hermes (colega com os dados de exemplo) o banco não existe: não é problema
             problema("executions.db", "executions.db do cron ilegível (%s): sem execuções dos jobs" % e)
+    for jid, lst in cron_hist_sala().items():    # completa com o histórico da Sala (o banco do Hermes guarda só uns 2 dias)
+        ja = {e.get("started_at") for e in execs.get(jid, [])}
+        novos = [e for e in lst if e["started_at"] not in ja]
+        if novos:
+            execs.setdefault(jid, []).extend(novos)
+            execs[jid].sort(key=lambda e: e.get("started_at") or "9999", reverse=True)   # sem início (só reivindicada) = a mais nova
     saida = []
     hoje = datetime.now().strftime("%Y-%m-%d")
     for jb in jobs:
@@ -602,21 +674,30 @@ def vault_painel():
         out["auditoria"] = {"divergencias": a["divergencias"], "age_s": int(agora - (a.get("checado_em") or agora)), "categorias": a.get("categorias") or {}}
     return out
 
-_LOCK, _CACHE = threading.Lock(), [0.0, b""]
+_LOCK, _CACHE = threading.Lock(), {}
 
 
-def estado_json():
-    """/api/state com cache de 0,8 s: várias abas abertas não multiplicam ps + SQLite a cada segundo."""
+def estado_json(dias=7):
+    """/api/state com cache de 0,8 s por período: várias abas abertas não multiplicam ps + SQLite a cada segundo."""
     with _LOCK:
-        if time.time() - _CACHE[0] < 0.8:
-            return _CACHE[1]
+        c = _CACHE.get(dias)
+        if c and time.time() - c[0] < 0.8:
+            return c[1]
         del SAUDE[:]
-        corpo = json.dumps(estado(), ensure_ascii=False).encode("utf8")
-        _CACHE[0], _CACHE[1] = time.time(), corpo
+        corpo = json.dumps(estado(dias), ensure_ascii=False).encode("utf8")
+        _CACHE[dias] = (time.time(), corpo)
         return corpo
 
 
-def estado():
+def indice_geral(agentes, crons, cat):
+    """Índice de sucesso de toda a operação no período: agentes + jobs SEM agente (o job que roda um agente conta pelo agente)."""
+    itens = agentes + [c for c in crons if not c["chama_agente"] and not any(v.get("cron_job") == c["name"] for v in cat.values())]
+    n = sum(x["sucesso"]["execucoes"] for x in itens)
+    f = sum(x["sucesso"]["falhas"] for x in itens)
+    return {"execucoes": n, "falhas": f, "pct": round(100.0 * (n - f) / n, 1) if n else None}
+
+
+def estado(dias=7):
     agora = datetime.now()
     hoje = agora.strftime("%Y-%m-%d")
     cat = ler_json(AGENTES)
@@ -733,16 +814,39 @@ def estado():
         if cad and a["status"] != "running" and (ult_s is None or decorrido > cad * 1.2):
             a["atrasado_s"] = int(decorrido - cad) if ult_s else int(cad)
         a["antigo"] = bool(a["status"] == "ok" and ult_s and agora_s - ult_s > ANTIGO_S and not a["atrasado_s"])
-    tend, tend_por = tendencia(hist, execs_cron)
-    if agora_s - _CUSTO[0] > 60:              # custo muda devagar: recalcula no máximo 1x por minuto
-        _CUSTO[0], _CUSTO[1] = agora_s, custos(hist, exs)
-    cst = _CUSTO[1]
+    # janelas de manutenção: falha/atraso dentro da janela não alarmam (selo e rótulo MANUTENÇÃO); rodando continua rodando
+    jan = janelas_manutencao()
+    for x in agentes + crons:
+        w = em_manutencao(jan.get(x["id"], []), agora_s)
+        x["manutencao"] = {"ate": ts_local(w[1])[:16], "motivo": w[2]} if w else None
+        if w and x["status"] != "running":
+            x["status_real"], x["status"] = x["status"], "manut"
+            x["atrasado_s"], x["antigo"] = None, False
+    # índice de sucesso no período (fora das janelas de manutenção): agentes pelo log; jobs pelas execuções que trabalharam ou falharam
+    corte = agora_s - dias * 86400
+    for a in agentes:
+        a["sucesso"] = indice_sucesso([(time.mktime(time.strptime(e["ts"], "%Y-%m-%d %H:%M:%S")), e["code"] != 0) for e in por.get(a["id"], [])],
+                                      jan.get(a["id"], []), corte)
+    for cid, ex in execs_cron:
+        c = next(x for x in crons if x["id"] == cid)
+        c["sucesso"] = indice_sucesso([(iso_epoch(e["started_at"]), e["status"] == "failed") for e in ex
+                                       if e.get("started_at") and (e["status"] == "failed" or dur(e) > 5)], jan.get(cid, []), corte)
+    try:
+        resp_padrao = ler_json(CONFIG).get("responsavel_padrao")
+    except Exception:
+        resp_padrao = None
+    for x in agentes + crons:
+        x["responsavel"] = (cat.get(x["id"], {}).get("responsavel") if x["kind"] == "agent" else None) or resp_padrao
+    tend, tend_por = tendencia(hist, execs_cron, dias)
+    if agora_s - _CUSTO.get(dias, (0,))[0] > 60:   # custo muda devagar: recalcula no máximo 1x por minuto (por período)
+        _CUSTO[dias] = (agora_s, custos(hist, exs, dias))
+    cst = _CUSTO[dias][1]
     nomes = (carregar_layout() or {}).get("nomes") or {}
     for x in agentes + crons:
-        x["tendencia"] = tend_por.get(x["id"], [[0, 0]] * 7)
+        x["tendencia"] = tend_por.get(x["id"], [[0, 0]] * dias)
         x["titulo"] = nomes.get(x["id"]) or nomes.get(x.get("name"))
     for a in agentes:
-        a["custo_7d"] = cst.get(a["id"])
+        a["custo"] = cst.get(a["id"])
     concluidos.sort(key=lambda e: e["ts"], reverse=True)
     em_execucao.sort(key=lambda e: e["ts"], reverse=True)
     feed = em_execucao + concluidos[:40]      # sempre: todos os em execução + os 40 concluídos mais recentes
@@ -755,11 +859,13 @@ def estado():
         "errors_today": sum(x.get("errors_today", 0) for x in agentes) + sum(c["failed_today"] for c in crons),
         "in_error": sum(1 for x in todos if x["status"] == "error"),
         "late": sum(1 for x in todos if x.get("atrasado_s") and x["status"] != "error"),
-        "stuck": sum(1 for x in agentes if x["status"] == "running" and (x.get("sem_acao_s") or 0) >= SEM_ACAO_S),
+        "stuck": sum(1 for x in agentes if x["status"] == "running" and (x.get("sem_acao_s") or 0) >= SEM_ACAO_S and not x.get("manutencao")),
+        "manut": sum(1 for x in todos if x.get("manutencao")),
         "agents": len(agentes), "crons": len(crons),
         "last_activity": feed[0]["ts"] if feed else None,
         "tendencia": tend,
-        "custo_7d_usd": round(sum(x["custo_usd"] for x in cst.values()), 2) if cst else None,
+        "custo_usd": round(sum(x["custo_usd"] for x in cst.values()), 2) if cst else None,
+        "sucesso": indice_geral(agentes, crons, cat),
         "eventos_executor": bool(exs),
     }
     est_equipe, equipe = equipe_painel()
@@ -771,7 +877,7 @@ def estado():
     sem_setor = [i for i, (z, m) in origem.items() if m.startswith("padrão")]
     return {"now": agora.strftime("%Y-%m-%d %H:%M:%S"), "agents": agentes, "crons": crons,
             "feed": feed, "kpis": kp, "layout": layout, "sem_setor": sem_setor, "jarvis": jarvis, "claude_usage": claude_uso(), "vault": vault_painel(), "equipe_estacao": est_equipe, "equipe": equipe,
-            "saude": list(SAUDE), "versao": 2}
+            "saude": list(SAUDE), "periodo_dias": dias, "versao": 3}
 
 
 def atividade(agente):
@@ -856,7 +962,12 @@ class H(BaseHTTPRequestHandler):
             return
         try:
             if p == "/api/state":
-                self._send(200, estado_json(), "application/json; charset=utf-8")
+                from urllib.parse import urlparse, parse_qs
+                try:
+                    dias = int((parse_qs(urlparse(self.path).query).get("dias") or ["7"])[0])
+                except ValueError:
+                    dias = 7
+                self._send(200, estado_json(dias if dias in PERIODOS else 7), "application/json; charset=utf-8")
             elif p == "/api/atividade":
                 from urllib.parse import urlparse, parse_qs
                 ag = (parse_qs(urlparse(self.path).query).get("agent") or [""])[0]

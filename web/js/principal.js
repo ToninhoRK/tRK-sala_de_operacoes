@@ -3,7 +3,7 @@
 async function poll(){
   if(document.hidden&&built&&!DBG&&(!SOM.on||Date.now()-SOM.ult<10000))return;   // aba escondida: sem consulta; com o som ligado, 1 consulta a cada 10 s para o alerta tocar
   SOM.ult=Date.now();
-  try{const r=await fetch('/api/state',{cache:'no-store'});const s=await r.json();if(DEMO)demo(s);
+  try{const r=await fetch('/api/state?dias='+CFG.periodo,{cache:'no-store'});const s=await r.json();if(DEMO)demo(s);
     const sig=JSON.stringify(s.layout.zones.map(z=>[z.id,z.items,z.w,z.h]));
     TITULOS=titulosDe(s);
     if(!built||sig!==SIG){const first=!built;SIG=sig;build(s);STATE=s;update(s);const ff=first?+(QS.get('ff')||0):0;for(let t=0;t<ff;t+=.1)sim(.1)

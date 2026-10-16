@@ -215,7 +215,7 @@ function tpxDesenhar(ts){
 const tpxPack=c=>(0xFF000000|(c[2]<<16)|(c[1]<<8)|c[0])>>>0;
 
 /* ---------- bonecos: sprites desenhados à mão (mesma pessoa e mesmas cores do boneco da planta; gestos por pose) ---------- */
-const TPXEST={running:'#2BD4F2',ok:'#7ED68B',error:'#F25C60',stuck:'#F2A93B',idle:'#5B6B7C'};
+const TPXEST={running:'#2BD4F2',ok:'#7ED68B',error:'#F25C60',stuck:'#F2A93B',idle:'#5B6B7C',manut:'#9C8BD9'};
 function tpxPessoa(st){
   if(TPX.cache.has('p:'+st.id))return TPX.cache.get('p:'+st.id);
   const R=mulberry(hash(st.id)), pk=a=>a[Math.floor(R()*a.length)];     // mesma sequência de sorteio do mkWorker
@@ -286,7 +286,7 @@ function tpxSprite(p,pose,f,lado,cor,carga){
 }
 function tpxBoneco(w,t,baloes){
   const m=poseOf(w), [sx,sy]=P(w.x,w.y), X=Math.round(sx/TPXK), Y=Math.round(sy/TPXK), sent=w.sit>.5;
-  const est=w.root.classList.contains('error')?'error':(w.root.classList.contains('stuck')||w.root.classList.contains('late'))?'stuck':w.root.classList.contains('running')?'running':w.root.classList.contains('ok')?'ok':'idle';
+  const est=w.root.classList.contains('manut')?'manut':w.root.classList.contains('error')?'error':(w.root.classList.contains('stuck')||w.root.classList.contains('late'))?'stuck':w.root.classList.contains('running')?'running':w.root.classList.contains('ok')?'ok':'idle';
   const ph=w.phase, f=m==='walk'?Math.floor(ph*8)%4:m==='run'?Math.floor(ph*12)%4:m==='alert'?Math.floor(ph*4)%2:m==='talk'?Math.floor(ph*3)%2:(m==='type'||m==='operate'||m==='printer')?Math.floor(ph*6)%2:0;
   const dono=tpxDono(w.root);
   if(!sent){const sc=tpxHex('#04070B');for(let i=-5;i<=5;i++)for(let j=-1;j<=1;j++)if(i*i/25+j*j<=1.1)tpxPf(X+i,Y+j,sc,.45)}

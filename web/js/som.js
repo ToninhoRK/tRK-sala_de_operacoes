@@ -18,7 +18,7 @@ function somFoto(s){
 }
 function somEventos(a,b){              // a = foto anterior, b = atual; devolve [[tipo,id],...] com tipo falha | aviso | volta
   const ev=[];                         // bad = está em falha até voltar a OK (erro → rodando → ok também conta como "voltou")
-  Object.entries(b.it).forEach(([id,c])=>{const p=a&&a.it[id]; c.bad=c.st==='error'||(!!p&&!!p.bad&&c.st!=='ok'); if(!p)return;
+  Object.entries(b.it).forEach(([id,c])=>{const p=a&&a.it[id]; c.bad=c.st==='error'||(!!p&&!!p.bad&&c.st!=='ok'); if(!p||c.st==='manut')return;   // em manutenção: nada toca
     if((c.st==='error'&&p.st!=='error')||c.err>p.err)ev.push(['falha',id]);
     else if((c.stuck&&!p.stuck)||(c.late&&!p.late))ev.push(['aviso',id]);
     else if(p.bad&&c.st==='ok')ev.push(['volta',id]);});
@@ -77,6 +77,9 @@ function somAutoteste(){
     ['continua atrasada',F({a:{st:'ok',err:0,late:true}}),F({a:{st:'ok',err:0,late:true}}),''],
     ['agente novo já em erro (sem base)',F({}),F({b:{st:'error',err:1}}),''],
     ['virada do dia (contador zera)',F({a:{st:'ok',err:3}}),F({a:{st:'ok',err:0}}),''],
+    ['falha → manutenção (sem som)',F({a:{st:'error',err:1,bad:true}}),F({a:{st:'manut',err:1}}),''],
+    ['falha nova dentro da manutenção',F({a:{st:'manut',err:1,bad:true}}),F({a:{st:'manut',err:2}}),''],
+    ['fim da manutenção já OK',F({a:{st:'manut',err:1,bad:true}}),F({a:{st:'ok',err:1}}),'volta'],
   ];
   casos.forEach(([n,a,b,esp])=>{const ev=somEventos(a,b).map(e=>e[0]).join(',');if(ev!==esp)r.push('som: '+n+' → "'+ev+'" (esperado "'+esp+'")')});
   return r;

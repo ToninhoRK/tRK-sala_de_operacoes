@@ -58,7 +58,7 @@ The same floor plan redrawn in pixels, with an outline around every piece of fur
 | Amber clock, "ATRASADO HÁ…" ("late by…") | a job should have run and didn't |
 | Blinking rack in the scheduler room | a scheduled job is running, with its next run alongside |
 
-At the top, a verdict answers first: **NORMAL**, **ATENÇÃO** (attention) or **FALHA** (failure). Next to it you get today's numbers, the 7-day trend, the latest activity and, if you want, your Claude plan usage.
+At the top, a verdict answers first: **NORMAL**, **ATENÇÃO** (attention) or **FALHA** (failure). Next to it you get today's numbers, the trend and success rate for the period (7 to 90 days), the latest activity and, if you want, your Claude plan usage.
 
 ## Highlights
 
@@ -69,9 +69,12 @@ At the top, a verdict answers first: **NORMAL**, **ATENÇÃO** (attention) or **
 - **A late job doesn't go unnoticed:** if a scheduled job didn't fire on time (or an agent went past its agreed interval without running), its station turns amber and the alarm goes off. Green only when it is really up to date.
 - **Sound alerts:** a short sound when something fails, hangs or runs late, and a softer one when it is back to normal. The room keeps watching even with the tab in the background.
 - **Activity without the noise:** repeated runs collapse into a single line ("×6 · desde 09:00", since 09:00), only what broke the pattern is highlighted, and one click shows **exceptions only**.
-- **Trend and usage:** 7 days of runs and failures at the top and on every station, with each run's duration and tokens and estimated cost per agent.
+- **Trend, success and usage:** runs and failures over 7, 15, 30, 60 or 90 days (you pick in CONFIGURAR) at the top and on every station, with the success rate (successful runs ÷ runs), each run's duration and tokens and estimated cost per agent. The room keeps its own history of scheduled jobs, so long periods work for them too.
+- **E-mail alerts (optional):** the room's watcher, a lightweight script with no AI, checks the operation every 5 minutes and e-mails a single address when something fails, hangs, runs late or a data source has a problem, and again when it is back to normal. Only names, states and times.
+- **Maintenance without false alarms:** opened a maintenance window for a station? It turns lilac with **MANUTENÇÃO** (maintenance) until the set date, triggers no sound or e-mail, and runs inside the window stay out of the success rate.
+- **Every station has an owner:** the person responsible shows up in the details, the list and the export.
 - **Nothing vanishes silently:** a run that died halfway, without reaching the end, shows up as **INTERROMPIDA** (interrupted).
-- **Office or list:** the OFFICE | LISTA switch at the top toggles between the floor plan and the same stations in a table you can sort by state, room, last run or usage (the active view stays lit). Handy on a phone and for finding a station fast. SOM (sound) and CENTRALIZAR (center) live at the top too, with the other controls.
+- **Office or list:** the OFFICE | LISTA switch at the top toggles between the floor plan and the same stations in a table you can sort by state, room, owner, last run, success or usage (the active view stays lit), and the **EXPORTAR CSV** (export) button takes the table to Excel. Handy on a phone and for finding a station fast. SOM (sound) and CENTRALIZAR (center) live at the top too, with the other controls.
 - **Smoothness on display:** the Operação card shows the animation's frames per second, updated every second (normal is your screen's refresh rate: 60 on a regular monitor). A number well below that means the page is too heavy for that machine.
 - **Keyboard friendly:** Tab moves through the stations, Enter opens the details and Esc closes them. Stations have descriptions for screen readers.
 - **Your way:** in the **CONFIGURAR** (settings) menu you choose the theme, how much animation you want, which labels show up, and whether stations display friendly names ("Consulta AD") or the technical id.
@@ -89,6 +92,7 @@ At the top, a verdict answers first: **NORMAL**, **ATENÇÃO** (attention) or **
 | Real data | **[Hermes](https://hermes-agent.nousresearch.com/docs)** or **[Claude Code](https://code.claude.com/docs)** on the same machine (or any command, [through the wrapper](#with-claude-code)). Without either, the room opens with example agents |
 | Claude usage at the top (optional) | **Claude Code** signed in with a subscription (Pro or Max) |
 | Team queue (optional) | an **Agidesk** account with an API key, stored in the macOS Keychain |
+| E-mail alerts (optional) | **[himalaya](https://github.com/pimalaya/himalaya)** with a sending account set up |
 | Run the tests | **Google Chrome** (the test opens the page in a hidden Chrome) |
 
 Tested on macOS. The server is pure Python and should also run on Linux and Windows, but the optional integrations (Keychain) are macOS only.
@@ -136,13 +140,23 @@ Without Hermes, these work the same: station, state, history, duration, failures
 - **Rooms and agents:** in `layout.json` you define the rooms and who sits in each one, by name or by prefix (for example, every `consulta_*` goes to CONSULTAS), plus each station's friendly name.
 - **Jobs with a deadline:** scheduled jobs already carry their own schedule. For an agent that should run at a certain frequency, add `"cadencia_h": 24` to its entry (and `"cadencia_dias_uteis": true` to skip weekends): once it goes 1.2× that interval without running, it shows up as late.
 - **Integrations:** the team queue in Agidesk and the note count of an Obsidian vault are set up in a local file (see `config.exemplo.json`). The access key lives in the macOS Keychain, never in the code.
+- **Owner:** `"responsavel_padrao"` in the local config file applies to every station; `"responsavel"` in an agent's entry in `agentes.json` applies to that agent only.
+- **Maintenance window:** with `manutencao.py` (the station is the agent's name or `cron:<job name>`):
+
+```bash
+python3 manutencao.py iniciar rateio_mensal --ate +2d --motivo "password change"
+python3 manutencao.py listar
+python3 manutencao.py encerrar rateio_mensal
+```
+
+- **Watcher (e-mail alerts and long job history):** schedule `python3 vigia_sala.py` every 5 minutes (launchd, cron or Windows Task Scheduler). Without the `alerta_email` key in the config it only keeps the history; with it, it alerts a single address. The first run only records how things stand, with no e-mail.
 - **For a TV:** open `/?tema=tv` (or `/?tema=pixeltv`, in pixel art) full screen; `&sala=<room id>` opens already zoomed into one room. If the TV has no keyboard or mouse, start Chrome with `--autoplay-policy=no-user-gesture-required` so sound plays without a click.
 
 ## Privacy and security
 
 - **Runs on your computer only:** the server only accepts connections from the computer itself (`127.0.0.1`).
 - **Outside websites can't read the room:** requests addressed to anything other than `127.0.0.1` or `localhost` are refused, so a malicious page open in your browser cannot read the room's data.
-- **Read-only:** the room only watches the agents; it never triggers or changes anything.
+- **Read-only:** the room only watches the agents; it never triggers or changes anything. The optional watcher only writes the room's own history and sends the alert e-mail.
 - **Zero tokens:** the room uses no AI model and only reads histories and state files.
 - **Content stays where it is:** the browser receives the agent's name, time, model and result. The agents' questions and answers never leave where they are.
 
@@ -150,7 +164,7 @@ Without Hermes, these work the same: station, state, history, duration, failures
 
 Two levels of tests come with the project:
 
-- `python3 testes_servidor.py`: in about one second, checks the server logic with fictitious data (states, lateness, run start and end, the `registrar_execucao.py` wrapper, usage, team privacy and the security locks). It also runs on GitHub on every push, on Python 3.9 and 3.13.
+- `python3 testes_servidor.py`: in about one second, checks the server logic with fictitious data (states, lateness, run start and end, the `registrar_execucao.py` wrapper, period and success rate, maintenance, the watcher with a fake e-mail sender, usage, team privacy and the security locks). It also runs on GitHub on every push, on Python 3.9 and 3.13.
 - `python3 testar_sala.py`: opens the page in a browser across many scenarios (real data, demo, TV mode, 3D, pixel art, the folder handoff between rooms, late jobs, new agents and failures) and fails on any overlapping label, misplaced object, script error or individual team data.
 - `python3 .github/checar_readmes.py`: checks that this README and the Portuguese version have the same sections, screenshots, tables and links. It runs on GitHub on every push, so the two versions never drift apart.
 

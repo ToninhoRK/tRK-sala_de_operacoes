@@ -41,7 +41,12 @@ function fmtTs(s){const d=parseTs(s);if(!d||isNaN(d))return '—';const n=new Da
 function rel(s){const d=parseTs(s);if(!d||isNaN(d))return '—';const m=Math.max(0,(Date.now()-d)/60000);
   if(m<1)return 'agora';if(m<60)return 'há '+Math.round(m)+' min';if(m<1440)return 'há '+Math.round(m/60)+' h';return 'há '+Math.round(m/1440)+' d'}
 function mmss(sec){sec=Math.max(0,Math.floor(sec));return pad(Math.floor(sec/60))+':'+pad(sec%60)}
-const STL={running:'EM EXECUÇÃO',ok:'OK',error:'FALHA',idle:'SEM EXEC.'};
+const STL={running:'EM EXECUÇÃO',ok:'OK',error:'FALHA',idle:'SEM EXEC.',manut:'MANUTENÇÃO'};
+// período dos indicadores (CONFIGURAR > Período): o servidor devolve em periodo_dias
+const PER=()=>(typeof STATE!=='undefined'&&STATE&&STATE.periodo_dias)||+((typeof CFG!=='undefined'&&CFG.periodo)||7);
+const fmtPct=v=>v==null?'—':v.toLocaleString('pt-BR',{maximumFractionDigits:1})+'%';
+function sucTxt(su){if(!su||!su.execucoes)return 'sem execuções no período'+(su&&su.manutencao?' · '+su.manutencao+' em manutenção (fora da conta)':'');
+  return fmtPct(su.pct)+' OK · '+(su.execucoes-su.falhas)+' de '+su.execucoes+(su.falhas?' · <span style="color:var(--red)">'+su.falhas+' falha'+(su.falhas>1?'s':'')+'</span>':'')+(su.manutencao?' · '+su.manutencao+' em manutenção (fora da conta)':'')}
 const JSTL={running:'ATENDENDO VOCÊ',ok:'DISPONÍVEL',idle:'DISPONÍVEL',error:'DISPONÍVEL'};
 const labelTec=id=>id.replace('cron:govti-','cron · ').replace('office365','o365').replace(/-/g,' ');
 // nomes amigáveis: campo "nomes" do layout.json (o servidor manda em "titulo"); CONFIGURAR > Nomes > Técnicos volta ao id

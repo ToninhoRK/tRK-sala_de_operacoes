@@ -47,7 +47,20 @@ function probe(){
   for(let i=0;i<pa.length;i++)for(let j=i+1;j<pa.length;j++)if(Math.hypot(pa[i].x-pa[j].x,pa[i].y-pa[j].y)<.45){const k=pa[i].at.type+'/'+pa[j].at.type+' '+pa[i].x.toFixed(1)+','+pa[i].y.toFixed(1);PROBE.stack[k]=(PROBE.stack[k]||0)+1}
 }
 /* ---------- diagnóstico (?debug=1): colisões de texto/hex/mesa e estado dos funcionários ---------- */
+// exportação CSV (?debug=1): linhas = estações + cabeçalho, mesmo número de colunas em todas, coluna de sucesso e proteção contra fórmula
+function csvAutoteste(){
+  if(!STATE||typeof csvLista!=='function')return ['csv: sem estado ou sem csvLista'];
+  const r=[], nc=l=>{let n=1,q=false;for(const ch of l){if(ch==='"')q=!q;else if(ch===';'&&!q)n++}return n};
+  const L=csvLista(STATE).replace(/^\ufeff/,'').split('\r\n').filter(Boolean), esp=1+STATE.agents.length+STATE.crons.length;
+  if(L.length!==esp)r.push('csv: '+L.length+' linhas (esperado '+esp+')');
+  L.forEach((l,i)=>{if(nc(l)!==nc(L[0]))r.push('csv: linha '+i+' com '+nc(l)+' colunas (cabeçalho '+nc(L[0])+')')});
+  if(!new RegExp('Sucesso em '+(STATE.periodo_dias||7)+' d').test(L[0]))r.push('csv: sem a coluna de sucesso do período');
+  const f=csvLista(Object.assign({},STATE,{agents:[Object.assign({},STATE.agents[0],{id:'=1+1;x'})],crons:[]})).split('\r\n')[1]||'';
+  if(!f.startsWith('"\'=1+1;x"'))r.push('csv: texto com = não foi protegido: '+f.slice(0,20));
+  return r;
+}
 function debugReport(){
+  csvAutoteste().forEach(errPush);
   const R=(b,k,id,t)=>({k,x:b.x,y:b.y,w:b.width,h:b.height,id,t});
   const A=[];
   document.querySelectorAll('.lb').forEach(g=>{const id=g.dataset.id;g.querySelectorAll('text').forEach(t=>A.push(R(t.getBBox(),'label '+id,id,'label')))});

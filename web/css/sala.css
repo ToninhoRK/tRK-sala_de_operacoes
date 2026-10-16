@@ -1,7 +1,7 @@
 :root{
   --bg:#070A0F; --panel:#0C1219; --panel2:#101822; --line:#1B2733; --line2:#2A3A4B;
   --text:#D6E0EA; --muted:#8597AB; --dim:#74869A;
-  --cyan:#2BD4F2; --green:#7ED68B; --amber:#F2A93B; --red:#F25C60; --idle:#5B6B7C;
+  --cyan:#2BD4F2; --green:#7ED68B; --amber:#F2A93B; --red:#F25C60; --idle:#5B6B7C; --manut:#9C8BD9;
   --mono: ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
   --sans: -apple-system,"SF Pro Text","Inter","Segoe UI",system-ui,sans-serif;
 }
@@ -41,7 +41,7 @@ aside{border-left:1px solid var(--line);background:var(--panel);display:flex;fle
 #detail .nm{font-family:var(--mono);font-size:15px;display:flex;align-items:center;gap:10px;margin-bottom:4px;word-break:break-all}
 #detail .ds{color:var(--muted);line-height:1.45;margin:6px 0 12px}
 .chip{font-family:var(--mono);font-size:10px;letter-spacing:.1em;padding:2px 7px;border-radius:2px;border:1px solid currentColor;white-space:nowrap}
-.chip.running{color:var(--cyan)} .chip.ok{color:var(--green)} .chip.error{color:var(--red)} .chip.idle{color:var(--idle)} .chip.fb{color:var(--amber)}
+.chip.running{color:var(--cyan)} .chip.ok{color:var(--green)} .chip.error{color:var(--red)} .chip.idle{color:var(--idle)} .chip.manut{color:var(--manut)} .chip.fb{color:var(--amber)}
 dl{display:grid;grid-template-columns:118px 1fr;gap:6px 10px;margin:0;font-size:12px}
 dt{color:var(--muted);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding-top:2px}
 dd{margin:0;font-family:var(--mono);font-size:12px;word-break:break-word}
@@ -59,6 +59,7 @@ dd{margin:0;font-family:var(--mono);font-size:12px;word-break:break-word}
 
 /* ---- cena SVG ---- */
 .st,.wk{--c:var(--idle)}
+.st.manut,.wk.manut{--c:var(--manut)} .st.manut .ring{opacity:.12} .st.manut .gl-idle{display:block}
 .st.running,.wk.running{--c:var(--cyan)} .st.ok,.wk.ok{--c:var(--green)} .st.error,.wk.error{--c:var(--red)}
 .st{cursor:pointer}
 .wk{cursor:pointer}
@@ -146,6 +147,7 @@ body.tv #visao{display:none}
 body.lista:not(.tv) #lista{display:block} body.lista:not(.tv) #svg,body.lista:not(.tv) .legend,body.lista:not(.tv) #fit{display:none}
 #lista table{width:100%;border-collapse:collapse;font-size:12.5px}
 #lista caption{text-align:left;color:var(--dim);font:11px var(--mono);letter-spacing:.06em;padding:0 0 10px}
+#csv{all:unset;cursor:pointer;margin-left:10px;padding:3px 9px;border:1px solid var(--line2);color:var(--muted);font:10px var(--mono);letter-spacing:.12em} #csv:hover,#csv:focus-visible{color:var(--text);border-color:var(--cyan)}
 #lista th{text-align:left;border-bottom:1px solid var(--line2);padding:0}
 #lista th button{all:unset;cursor:pointer;display:block;padding:6px 8px;font:10px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 #lista th button:hover,#lista th button:focus-visible{color:var(--text);outline:1px solid var(--cyan)}
@@ -153,7 +155,7 @@ body.lista:not(.tv) #lista{display:block} body.lista:not(.tv) #svg,body.lista:no
 #lista td.nm{font-family:var(--mono);color:var(--text);white-space:normal} #lista td small{color:var(--dim);font-size:10px}
 #lista tr{cursor:pointer} #lista tbody tr:hover{background:rgba(255,255,255,.04)} #lista tr.sel{background:rgba(43,212,242,.07);box-shadow:inset 3px 0 0 var(--cyan)}
 #lista tr:focus-visible{outline:1px solid var(--cyan);outline-offset:-1px} #lista .z{color:#3E4E5F}
-@media (max-width:700px){#lista{padding:10px 8px 40px} #lista th:nth-child(3),#lista td:nth-child(3),#lista th:nth-child(7),#lista td:nth-child(7){display:none} #lista td{padding:6px 5px;white-space:normal} #lista th button{padding:6px 5px}}
+@media (max-width:700px){#lista{padding:10px 8px 40px} #lista th:nth-child(3),#lista td:nth-child(3),#lista th:nth-child(4),#lista td:nth-child(4),#lista th:nth-child(9),#lista td:nth-child(9){display:none} #lista td{padding:6px 5px;white-space:normal} #lista th button{padding:6px 5px}}
 #lista .chip.stuck{background:rgba(242,169,59,.14);color:var(--amber);border-color:rgba(242,169,59,.4)}
 .spark{vertical-align:middle} .kpi .sub .spark{margin-right:4px;vertical-align:-2px} .kpi .sub .r{color:var(--red)}
 /* filtro da atividade recente */

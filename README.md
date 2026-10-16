@@ -58,7 +58,7 @@ A mesma planta redesenhada em pixels, com contorno em cada móvel e funcionário
 | Relógio âmbar, "ATRASADO HÁ…" | uma rotina deveria ter rodado e não rodou |
 | Rack piscando na sala do agendador | uma rotina agendada está em execução, com a próxima rodada ao lado |
 
-No topo, um veredito responde antes de tudo: **NORMAL**, **ATENÇÃO** ou **FALHA**. Ao lado ficam os números do dia, a tendência dos últimos 7 dias, a última atividade e, se você quiser, o consumo do plano do Claude.
+No topo, um veredito responde antes de tudo: **NORMAL**, **ATENÇÃO** ou **FALHA**. Ao lado ficam os números do dia, a tendência e o índice de sucesso do período (7 a 90 dias), a última atividade e, se você quiser, o consumo do plano do Claude.
 
 ## Destaques
 
@@ -69,9 +69,12 @@ No topo, um veredito responde antes de tudo: **NORMAL**, **ATENÇÃO** ou **FALH
 - **Rotina atrasada não passa despercebida:** se um job agendado não disparou na hora (ou um agente passou do intervalo combinado sem rodar), a estação fica âmbar e o alarme avisa. Verde só quando está realmente em dia.
 - **Alerta sonoro:** um som curto quando algo falha, trava ou atrasa, e outro mais suave quando volta ao normal. A sala continua de olho mesmo com a aba em segundo plano.
 - **Atividade sem ruído:** execuções repetidas viram uma linha só ("×6 · desde 09:00"), o destaque fica só para o que fugiu do normal e um clique mostra **só as exceções**.
-- **Tendência e consumo:** 7 dias de execuções e falhas no topo e em cada estação, com duração de cada execução e tokens e custo estimado por agente.
+- **Tendência, sucesso e consumo:** execuções e falhas de 7, 15, 30, 60 ou 90 dias (você escolhe no CONFIGURAR) no topo e em cada estação, com o índice de sucesso (execuções OK ÷ execuções), a duração de cada execução e tokens e custo estimado por agente. A sala guarda o próprio histórico dos jobs, então o período longo vale também para eles.
+- **Aviso por e-mail (opcional):** o vigia da sala, um script leve sem I.A., confere a operação a cada 5 minutos e manda um e-mail para um único endereço quando algo falha, trava, atrasa ou uma fonte de dados dá problema, e outro quando volta ao normal. Só nomes, estados e horários.
+- **Manutenção sem alarme falso:** abriu uma janela de manutenção para uma estação? Ela fica lilás com **MANUTENÇÃO** até a data marcada, não dispara som nem e-mail, e o que roda dentro da janela fica fora do índice de sucesso.
+- **Cada estação tem dono:** o responsável aparece no detalhe, na lista e na exportação.
 - **Nada some sem aviso:** execução que morreu no meio do caminho, sem chegar ao fim, aparece como **INTERROMPIDA**.
-- **Escritório ou lista:** a chave OFFICE | LISTA no topo alterna entre a planta e as mesmas estações numa tabela ordenável por estado, sala, última execução ou consumo (a visão ativa fica acesa). Bom para o celular e para achar uma estação rápido. SOM e CENTRALIZAR também ficam no topo, junto com os demais controles.
+- **Escritório ou lista:** a chave OFFICE | LISTA no topo alterna entre a planta e as mesmas estações numa tabela ordenável por estado, sala, responsável, última execução, sucesso ou consumo (a visão ativa fica acesa), e o botão **EXPORTAR CSV** leva a tabela para o Excel. Bom para o celular e para achar uma estação rápido. SOM e CENTRALIZAR também ficam no topo, junto com os demais controles.
 - **Fluidez à vista:** o card Operação mostra os quadros por segundo da animação, atualizados a cada segundo (o normal é a taxa da tela: 60 num monitor comum). Número bem abaixo disso indica que a página está pesada para aquela máquina.
 - **Pelo teclado:** Tab percorre as estações, Enter abre o detalhe e Esc fecha. As estações têm descrição para leitor de tela.
 - **Do seu jeito:** pelo menu **CONFIGURAR** você escolhe o tema, a intensidade da animação, quais rótulos aparecem e se as estações mostram nomes amigáveis ("Consulta AD") ou o id técnico.
@@ -89,6 +92,7 @@ No topo, um veredito responde antes de tudo: **NORMAL**, **ATENÇÃO** ou **FALH
 | Dados de verdade | o **[Hermes](https://hermes-agent.nousresearch.com/docs)** ou o **[Claude Code](https://code.claude.com/docs)** na mesma máquina (ou qualquer comando, [pelo embrulho](#com-o-claude-code)). Sem nenhum deles, a sala abre com agentes de exemplo |
 | Consumo do Claude no topo (opcional) | o **Claude Code** com login por assinatura (Pro ou Max) |
 | Fila da equipe (opcional) | uma conta no **Agidesk** com chave de API, guardada no Keychain do macOS |
+| Aviso por e-mail (opcional) | o **[himalaya](https://github.com/pimalaya/himalaya)** com uma conta de envio configurada |
 | Rodar os testes | o **Google Chrome** (o teste abre a página num Chrome invisível) |
 
 Testada no macOS. O servidor é Python puro e deve rodar também em Linux e Windows, mas as integrações opcionais (Keychain) são do macOS.
@@ -136,13 +140,23 @@ Sem o Hermes, funcionam igual: estação, estado, histórico, duração, falhas,
 - **Salas e agentes:** em `layout.json` você define as salas e quem senta em cada uma, por nome ou por prefixo (por exemplo, todo `consulta_*` vai para CONSULTAS), e os nomes amigáveis de cada estação.
 - **Rotinas com prazo:** os jobs agendados já trazem a própria agenda. Para um agente que deve rodar com certa frequência, acrescente `"cadencia_h": 24` na entrada dele (e `"cadencia_dias_uteis": true` para não contar o fim de semana): passou de 1,2× esse intervalo sem rodar, ele aparece como atrasado.
 - **Integrações:** a fila da equipe no Agidesk e a contagem de notas de um vault do Obsidian são configuradas num arquivo local (veja `config.exemplo.json`). A chave de acesso fica no Keychain do macOS, nunca no código.
+- **Responsável:** `"responsavel_padrao"` no arquivo local de configuração vale para todas as estações; `"responsavel"` na entrada de um agente no `agentes.json` vale só para ele.
+- **Janela de manutenção:** pelo `manutencao.py` (a estação é o nome do agente ou `cron:<nome do job>`):
+
+```bash
+python3 manutencao.py iniciar rateio_mensal --ate +2d --motivo "troca de senha"
+python3 manutencao.py listar
+python3 manutencao.py encerrar rateio_mensal
+```
+
+- **Vigia (aviso por e-mail e histórico longo dos jobs):** agende `python3 vigia_sala.py` a cada 5 minutos (launchd, cron ou Agendador de Tarefas). Sem a chave `alerta_email` na configuração, ele só guarda o histórico; com ela, avisa um único endereço. A primeira rodada só anota como as coisas estão, sem e-mail.
 - **Para uma TV:** abra `/?tema=tv` (ou `/?tema=pixeltv`, em pixel art) em tela cheia; `&sala=<id da sala>` abre já aproximado numa sala. Se a TV não tiver teclado nem mouse, inicie o Chrome com `--autoplay-policy=no-user-gesture-required` para o som tocar sem precisar de clique.
 
 ## Privacidade e segurança
 
 - **Roda só no seu computador:** o servidor só aceita conexões do próprio computador (`127.0.0.1`).
 - **Sites de fora não leem a sala:** pedidos com endereço diferente de `127.0.0.1` ou `localhost` são recusados, então uma página maliciosa aberta no navegador não consegue ler os dados da sala.
-- **Somente leitura:** a sala só observa os agentes, nunca dispara nem altera nada.
+- **Somente leitura:** a sala só observa os agentes, nunca dispara nem altera nada. O vigia opcional só grava o histórico da própria sala e manda o e-mail de aviso.
 - **Zero tokens:** a sala não usa modelo de I.A. e só lê históricos e arquivos de estado.
 - **O conteúdo fica onde está:** o navegador recebe nome do agente, horário, modelo e resultado. Perguntas e respostas dos agentes nunca saem do lugar onde estão.
 
@@ -150,7 +164,7 @@ Sem o Hermes, funcionam igual: estação, estado, histórico, duração, falhas,
 
 Dois níveis de teste acompanham o projeto:
 
-- `python3 testes_servidor.py`: em cerca de um segundo, confere a lógica do servidor com dados fictícios (estados, atraso, início e fim de execução, o embrulho `registrar_execucao.py`, consumo, privacidade da equipe e as travas de segurança). Roda também no GitHub a cada envio, em Python 3.9 e 3.13.
+- `python3 testes_servidor.py`: em cerca de um segundo, confere a lógica do servidor com dados fictícios (estados, atraso, início e fim de execução, o embrulho `registrar_execucao.py`, período e índice de sucesso, manutenção, o vigia com um envio de e-mail falso, consumo, privacidade da equipe e as travas de segurança). Roda também no GitHub a cada envio, em Python 3.9 e 3.13.
 - `python3 testar_sala.py`: abre a página num navegador em vários cenários (dados reais, demonstração, Modo TV, 3D, pixel art, a pasta entre salas, atrasos, agentes novos e falhas) e reprova qualquer rótulo sobreposto, objeto fora do lugar, erro de script ou dado individual da equipe.
 - `python3 .github/checar_readmes.py`: confere que este README e a versão em inglês têm as mesmas seções, capturas, tabelas e links. Roda no GitHub a cada envio, para as duas versões nunca ficarem diferentes.
 

@@ -6,17 +6,19 @@
    deles, recarrega a página (os dois acompanham a montagem da planta). */
 // temas que ligam o Modo TV e o pixel art ("pixeltv" = os dois juntos)
 const temaTV=t=>t==='tv'||t==='pixeltv', temaPX=t=>t==='pixel'||t==='pixeltv';
-const CFG_PADRAO={tema:'planta',anim:'completa',rotulos:'todos',nomes:'amigaveis'};
+const CFG_PADRAO={tema:'planta',anim:'completa',rotulos:'todos',nomes:'amigaveis',periodo:'7'};
 const CFG_OPCOES={
   tema:{planta:'Planta isométrica',tv:'Modo TV','3d':'3D',pixel:'Pixel art',pixeltv:'Pixel art · Modo TV'},
   anim:{completa:'Completa',reduzida:'Reduzida',desligada:'Desligada'},
   rotulos:{todos:'Todos',ativos:'Nomes + rodando e falha',problemas:'Só rodando e falha',nenhum:'Nenhum'},
   nomes:{amigaveis:'Amigáveis',tecnicos:'Técnicos (id do agente)'},
+  periodo:{'7':'7 dias','15':'15 dias','30':'30 dias','60':'60 dias','90':'90 dias'},
 };
 const CFG_AJUDA={
   tema:'Modo TV: sem o painel lateral, números e rótulos maiores, cursor some parado. 3D: a mesma planta em 3D de verdade (luz, sombra, volume), mesmo ângulo e rótulos. Pixel art: a mesma planta desenhada em pixels (aproxime com a roda do mouse ou clicando na placa da sala); "Pixel art · Modo TV" junta os dois.',
   anim:'Reduzida: bonecos a 15 quadros/s e sem os pulsos decorativos (melhor para TV ou computador fraco). Desligada: ninguém anda; cada boneco fica parado onde o estado manda.',
   nomes:'Amigáveis: os nomes do campo "nomes" do layout.json (ex.: Consulta AD). Técnicos: o id do agente, como no agentes.json e nos logs.',
+  periodo:'Quantos dias entram na tendência, no índice de sucesso (execuções OK ÷ execuções, fora das janelas de manutenção) e no consumo: no topo, no detalhe da estação, na lista e na exportação. Jobs: a Sala guarda o próprio histórico desde a instalação do vigia; antes disso, só os últimos ~2 dias.',
   rotulos:'Nomes + rodando e falha: todos os nomes, mas a linha de estado só em quem está rodando ou em falha (some o "ÚLT. dd/mm"). Só rodando e falha esconde também o nome das estações OK e sem histórico (a cor do selo continua).',
 };
 const CFG=(()=>{let c={};try{c=JSON.parse(localStorage.getItem('sala_cfg')||'{}')}catch(e){}
@@ -34,7 +36,8 @@ function cfgAplicar(){
 }
 function cfgMudar(k,v){
   if(k==='tema'&&((v==='3d')!==(CFG.tema==='3d')||temaPX(v)!==temaPX(CFG.tema))){CFG[k]=v;cfgSalvar();const u=new URLSearchParams(location.search);u.delete('tema');location.search=u.toString();if(!u.toString())location.reload();return}   // entrar ou sair do 3D ou do pixel art: recarrega
-  if(k==='nomes'){CFG[k]=v;cfgSalvar();location.reload();return}      // os rótulos da planta são montados uma vez: recarrega
+  if(k==='nomes'){CFG[k]=v;cfgSalvar();location.reload();return}
+  if(k==='periodo'){CFG[k]=v;cfgSalvar();cfgMenuSync();if(typeof poll==='function')poll();return}   // o servidor recalcula para o período novo      // os rótulos da planta são montados uma vez: recarrega
   const animAntes=CFG.anim; CFG[k]=v; cfgSalvar(); cfgAplicar();
   if(k==='anim'&&built){ if(v==='desligada')parado(); else if(animAntes==='desligada')Object.values(WORKERS).forEach(w=>{w.timer=rr(1,4)}) }
 }
@@ -49,7 +52,7 @@ function cfgMenuMontar(){
   const m=$('cfgmenu'); if(!m)return;
   let h='';
   for(const k in CFG_OPCOES){
-    h+=`<div class="grp"><div class="tt">${{tema:'Tema',anim:'Animação',rotulos:'Rótulos das estações',nomes:'Nomes'}[k]}</div>`;
+    h+=`<div class="grp"><div class="tt">${{tema:'Tema',anim:'Animação',rotulos:'Rótulos das estações',nomes:'Nomes',periodo:'Período dos indicadores'}[k]}</div>`;
     for(const v in CFG_OPCOES[k])h+=`<label><input type="radio" name="cfg-${k}" value="${v}"> ${CFG_OPCOES[k][v]}</label>`;
     h+=`<div class="aj">${CFG_AJUDA[k]}</div></div>`;
   }

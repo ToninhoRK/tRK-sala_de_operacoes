@@ -3,5 +3,7 @@
   "agidesk_keychain_account": "seu-usuario",
   "agidesk_keychain_service": "nome-do-item-no-keychain",
   "equipe_id": "0",
-  "vault_path": "~/caminho/do/seu/vault"
+  "vault_path": "~/caminho/do/seu/vault",
+  "responsavel_padrao": "Seu Nome",
+  "alerta_email": {"para": "voce@exemplo.com", "de": "sala@exemplo.com", "conta_himalaya": "nome-da-conta-no-himalaya"}
 }

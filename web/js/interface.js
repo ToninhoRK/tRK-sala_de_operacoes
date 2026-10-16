@@ -36,7 +36,7 @@ function update(s){
     if(STATIONS[it.id])STATIONS[it.id].it=it;
     const late=atrasado(it);
     document.querySelectorAll('.st:not(.lb)[data-id="'+it.id+'"]').forEach(g=>{if(!g.hasAttribute('tabindex')){g.setAttribute('tabindex','0');g.setAttribute('role','button')}g.setAttribute('aria-label',label(it.id)+': '+estadoTxt(it))});
-    document.querySelectorAll('.st[data-id="'+it.id+'"], .wk[data-id="'+it.id+'"]').forEach(g=>{setStatusClass(g,it.status);g.classList.toggle('late',late);g.classList.toggle('velho',!!it.antigo&&!late);g.classList.toggle('stuck',it.status==='running'&&it.sem_acao_s>=300)});
+    document.querySelectorAll('.st[data-id="'+it.id+'"], .wk[data-id="'+it.id+'"]').forEach(g=>{setStatusClass(g,it.status);g.classList.toggle('late',late);g.classList.toggle('velho',!!it.antigo&&!late&&it.status!=='manut');g.classList.toggle('stuck',it.status==='running'&&it.sem_acao_s>=300)});
   });
   if(SEL)select(SEL);
   if(built)pastasChecar(antes);
@@ -46,8 +46,9 @@ function update(s){
   $('k-op-v').textContent=ver.t; $('k-op-v').className=ver.c; $('k-op-s').textContent=ver.d; $('k-op').className='kpi op-'+ver.c;
   num('k-run',k.running,'c'); num('k-today',k.runs_today,''); num('k-err',k.errors_today,'r');
   if(k.tendencia){const T=k.tendencia, ex=T.reduce((a,x)=>a+x.execucoes,0), fa=T.reduce((a,x)=>a+x.falhas,0);
-    $('k-tend').innerHTML=spark(T,70,13)+' 7 d: '+ex+(fa?' · <span class="r">'+fa+' falha'+(fa>1?'s':'')+'</span>':'');
-    $('k-tend').title='Execuções por dia nos últimos 7 dias (hoje à direita): '+T.map(x=>x.dia.slice(8)+'/'+x.dia.slice(5,7)+' '+x.execucoes+(x.falhas?' ('+x.falhas+' falha)':'')).join(' · ')+(k.custo_7d_usd!=null?' · custo estimado 7 d: US$ '+k.custo_7d_usd.toFixed(2):'')}
+    const P=PER(), su=k.sucesso||{};
+    $('k-tend').innerHTML=spark(T,70,13)+' '+P+' d: '+ex+(su.pct!=null?' · <span class="'+(fa?'r':'')+'">'+fmtPct(su.pct)+' OK</span>':'');
+    $('k-tend').title='Execuções por dia nos últimos '+P+' dias (hoje à direita); índice de sucesso '+fmtPct(su.pct)+' ('+(su.falhas||0)+' falha(s) em '+(su.execucoes||0)+' execuções, fora das janelas de manutenção): '+T.map(x=>x.dia.slice(8)+'/'+x.dia.slice(5,7)+' '+x.execucoes+(x.falhas?' ('+x.falhas+' falha)':'')).join(' · ')+(k.custo_usd!=null?' · custo estimado '+P+' d: US$ '+k.custo_usd.toFixed(2):'')}
   $('k-inerr').textContent=k.in_error?k.in_error+' de '+(k.agents+k.crons)+' em falha agora':'nenhuma em falha agora';
   $('k-last').textContent=k.last_activity?rel(k.last_activity):'—';
   renderFeed(s); renderClaude(s); renderVault(s); renderEquipe(s); if(typeof renderLista==='function')renderLista(s);
@@ -61,10 +62,11 @@ function update(s){
 // atrasado = rotina que deveria ter rodado e não rodou (job com a próxima rodada vencida; agente com cadência vencida); falha e rodando têm prioridade
 function fmtAtraso(s){s=Math.max(0,s|0);return s<3600?Math.max(1,Math.round(s/60))+' MIN':s<86400?Math.floor(s/3600)+'H'+(Math.floor(s%3600/60)?pad(Math.floor(s%3600/60)):''):Math.floor(s/86400)+' D'}
 // texto do estado para leitor de tela e modo lista
-function estadoTxt(it){return it.status==='error'?'falha':it.status==='running'?(it.sem_acao_s>=300?'rodando, sem ação':'rodando'):atrasado(it)?'atrasado':it.status==='ok'?'última execução OK':'sem histórico'}
+function estadoTxt(it){return it.status==='manut'?'em manutenção':it.status==='error'?'falha':it.status==='running'?(it.sem_acao_s>=300?'rodando, sem ação':'rodando'):atrasado(it)?'atrasado':it.status==='ok'?'última execução OK':'sem histórico'}
 // barras de execuções por dia (cinza) com a parte de falhas em vermelho; hoje à direita, um tom mais claro. Cinza: ciano é só "rodando"
 function spark(t,w=112,h=26){
-  const v=(t||[]).map(x=>Array.isArray(x)?x:[x.execucoes,x.falhas]); if(!v.length)return '';
+  let v=(t||[]).map(x=>Array.isArray(x)?x:[x.execucoes,x.falhas]); if(!v.length)return '';
+  const mb=Math.max(1,Math.floor(w/3.5)); if(v.length>mb){const g=Math.ceil(v.length/mb),u=[];for(let i=v.length;i>0;i-=g){const p=v.slice(Math.max(0,i-g),i);u.unshift([p.reduce((a,x)=>a+x[0],0),p.reduce((a,x)=>a+x[1],0)])}v=u}   // período longo: cada barra soma alguns dias (hoje continua na última)
   const mx=Math.max(1,...v.map(x=>x[0])), bw=w/v.length;
   return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">`+v.map((x,i)=>{
     const hh=x[0]?Math.max(2,x[0]/mx*(h-1)):1, hf=x[1]?Math.max(2,x[1]/mx*(h-1)):0, c=!x[0]?'#1E2A36':i===v.length-1?'#8597AB':'#4E6377';
@@ -112,13 +114,14 @@ function tick(){
     }
     if(it.kind==='jarvis') t=JSTL[it.status];
     else if(it.status==='running') t=(it.sem_acao_s>=300?'SEM AÇÃO HÁ '+Math.round((it.sem_acao_s+el0)/60)+' MIN':'RODANDO '+mmss((it.elapsed_s||0)+el0));
+    else if(it.status==='manut'){const d=parseTs(it.manutencao.ate+':00'),n=new Date();t='MANUT. ATÉ '+(d.toDateString()===n.toDateString()?pad(d.getHours())+':'+pad(d.getMinutes()):pad(d.getDate())+'/'+pad(d.getMonth()+1))}   // curto: o rótulo não pode crescer
     else if(atrasado(it)) t=(it.kind!=='cron'&&!it.last)?'ATRASADO · NUNCA RODOU':'ATRASADO HÁ '+fmtAtraso(it.atrasado_s+el0);
     else if(it.kind==='cron') t=it.status==='error'?'FALHA · '+fmtTs((it.last_run||'').replace('T',' ').slice(0,19)):(it.paused?'PAUSADO':(it.next_run?'PRÓX. '+fmtTs(it.next_run.replace('T',' ').slice(0,19)):'—'));
     else if(it.last) t=(it.status==='error'?'FALHA · ':'ÚLT. ')+fmtTs(it.last.ts);   // antigo: só o selo e o texto apagados (sufixo com dias alargava o rótulo e encostava na mesa vizinha)
     else t='SEM EXECUÇÕES';
     sx.textContent=t;
     g.classList.toggle('stuck',it.status==='running'&&it.sem_acao_s>=300);
-    g.classList.toggle('late',atrasado(it)); g.classList.toggle('velho',!!it.antigo&&!atrasado(it));
+    g.classList.toggle('late',atrasado(it)); g.classList.toggle('velho',!!it.antigo&&!atrasado(it)&&it.status!=='manut');
   });
   renderTV();
   const n=new Date(); $('clock').textContent=pad(n.getDate())+'/'+pad(n.getMonth()+1)+'/'+n.getFullYear()+'  '+pad(n.getHours())+':'+pad(n.getMinutes())+':'+pad(n.getSeconds());
@@ -144,12 +147,16 @@ function renderDetail(){
   let rows=''; const add=(k,v)=>rows+=`<dt>${k}</dt><dd>${v}</dd>`;
   const zt=((STATE.layout.zones.find(z=>z.id===it.setor))||{}).title;
   if(zt)add('Sala',esc(zt)+'<br><span style="color:var(--dim)">'+esc(it.setor_motivo||'')+'</span>');
+  const P=PER();
+  if(it.kind==='agent'||it.kind==='cron'){add('Responsável',esc(it.responsavel||'—'));
+    if(it.manutencao)add('Manutenção','até '+fmtTs(it.manutencao.ate+':00')+(it.manutencao.motivo?' · '+esc(it.manutencao.motivo):'')+'<br><span style="color:var(--dim)">falha e atraso não alarmam nem contam no índice'+(it.status_real?'; estado real: '+esc(STL[it.status_real]||it.status_real):'')+'</span>')}
   if(it.kind==='agent'){
     add('Modelo',esc(it.model||'—')); add('Provedor',esc(it.provider||'—'));
     add('Skills',esc((it.skills||[]).join(', ')||'—')); add('Turnos máx.',esc(it.max_turns??'—'));
     add('Execuções',`${it.runs_today} hoje · ${it.runs_total} no histórico`);
-    add('Últimos 7 dias',spark(it.tendencia)+'<br><span style="color:var(--dim)">'+tendTxt(it.tendencia)+'</span>');
-    const c=it.custo_7d; add('Consumo 7 d',c?fmtTok(c.tokens)+' tokens · '+c.execucoes+' exec.'+(c.custo_usd>0?' · US$ '+c.custo_usd.toFixed(2):'')+'<br><span style="color:var(--dim)">'+(c.custo_usd>0?'custo estimado pelo Hermes':'custo estimado US$ 0 (modelo gratuito ou por assinatura)')+(c.aprox?'; parte com vínculo aproximado (execuções anteriores ao registro de início e fim)':'')+'</span>':'—');
+    add('Últimos '+P+' dias',spark(it.tendencia)+'<br><span style="color:var(--dim)">'+tendTxt(it.tendencia)+'</span>');
+    add('Sucesso '+P+' d',sucTxt(it.sucesso));
+    const c=it.custo; add('Consumo '+P+' d',c?fmtTok(c.tokens)+' tokens · '+c.execucoes+' exec.'+(c.custo_usd>0?' · US$ '+c.custo_usd.toFixed(2):'')+'<br><span style="color:var(--dim)">'+(c.custo_usd>0?'custo estimado pelo Hermes':'custo estimado US$ 0 (modelo gratuito ou por assinatura)')+(c.aprox?'; parte com vínculo aproximado (execuções anteriores ao registro de início e fim)':'')+'</span>':'—');
     if(it.cadencia_h)add('Cadência','a cada '+(it.cadencia_h%24?it.cadencia_h+' h':(it.cadencia_h/24)+' dia'+(it.cadencia_h>24?'s':''))+(it.dias_uteis?' útil':'')+(atrasado(it)?' · <span style="color:var(--amber)">atrasado há '+fmtAtraso(it.atrasado_s).toLowerCase()+'</span>':' · em dia'));
     if(it.status==='running')add('Rodando há',mmss(it.elapsed_s||0)+' <span style="color:var(--dim)">(limite '+Math.round((it.timeout_s||1800)/60)+' min)</span>'+(it.sem_acao_s!=null?'<br>última ação há '+mmss(it.sem_acao_s)+(it.sem_acao_s>=300?' <span style="color:var(--amber)">sem ação: ferramenta demorando ou travado</span>':''):''));
     add('Última',it.last?`${fmtTs(it.last.ts)} · ${rel(it.last.ts)}<br>código ${it.last.code}${it.last.dur!=null?' · durou '+fmtDur(it.last.dur):''}${it.last.fallback?' · fallback':''}${it.last.interrompida?' · <span style="color:var(--red)">interrompida (sem registro no log)</span>':''}`:'—');
@@ -171,7 +178,8 @@ function renderDetail(){
     add('Agenda',esc(it.schedule||'—')); add('Próxima',it.next_run?fmtTs(it.next_run.replace('T',' ').slice(0,19)):'—');
     add('Última',it.last_run?fmtTs(it.last_run.replace('T',' ').slice(0,19))+' · '+esc(it.last_status||''):'—');
     add('Checagens hoje',`${it.checks_today}${it.failed_today?' · '+it.failed_today+' com falha':''}`);
-    add('Últimos 7 dias',spark(it.tendencia)+'<br><span style="color:var(--dim)">'+tendTxt(it.tendencia)+' (só as que trabalharam ou falharam)</span>');
+    add('Últimos '+P+' dias',spark(it.tendencia)+'<br><span style="color:var(--dim)">'+tendTxt(it.tendencia)+' (só as que trabalharam ou falharam)</span>');
+    add('Sucesso '+P+' d',sucTxt(it.sucesso));
   }
   const rec=(it.recent||[]).slice(0,5).map(e=>`<div class="mini"><span>${fmtTs(e.ts)}</span><span>${modelShort(e.model)}${e.dur!=null?' · '+fmtDur(e.dur):''}</span><span style="color:var(--${e.code?'red':'green'})">${e.code?(e.interrompida?'INTERR.':'ERRO'):'OK'}</span></div>`).join('');
   d.innerHTML=`<h2>Estação <span>${it.kind==='cron'?'AGENDADOR':(it.kind==='jarvis'?'HERMES PRINCIPAL':(it.kind==='equipe'?'EQUIPE AGIDESK':'AGENTE'))}</span></h2>
@@ -219,12 +227,15 @@ function demo(s){
   if(s.jarvis){const jr=QS.get('jarvis')==='running';s.jarvis.status=jr?'running':'ok';s.jarvis.active_sessions=jr?1:0}
   s.claude_usage={updated_at:0,age_s:120,five_hour:{pct:34,resets_at:Math.floor(Date.now()/1000)+9000,reset_passou:false},seven_day:{pct:78,resets_at:Math.floor(Date.now()/1000)+250000,reset_passou:false}};
   s.vault={total:900,age_s:60,por_tipo:{'tipo-a':349,'tipo-b':227,'tipo-c':151,'(sem tipo)':26,'tipo-d':24,'tipo-e':14},delta_hoje:7,delta_semana:31,dias_semana:7,auditoria:{divergencias:0,age_s:300,categorias:{}}};
-  // demonstração: 7 dias, consumo e equipe simulados (determinísticos, para as capturas)
-  const dd=i=>{const d=new Date(Date.now()-(6-i)*864e5);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}, base7=[9,12,0,0,11,15,14], fal7=[0,1,0,0,0,2,1];
-  [...s.agents,...s.crons].forEach((x,j)=>{x.tendencia=base7.map((v,i)=>[Math.max(0,Math.round(v/(j+2))+((i+j)%3===0?1:0)),i===6&&x.status==='error'?1:0]);
-    if(x.kind==='agent'){const n7=x.tendencia.reduce((a,v)=>a+v[0],0);x.runs_today=Math.max(x.runs_today||0,x.tendencia[6][0]);x.runs_total=Math.max(x.runs_total||0,n7)}   // detalhe coerente com o gráfico
-    if(x.kind==='agent')x.custo_7d={tokens:[412000,96000,1280000,58000,240000][j%5],custo_usd:[0,0,3.42,0,0.61][j%5],execucoes:x.tendencia.reduce((a,v)=>a+v[0],0),aprox:false}});
+  // demonstração: período, consumo e equipe simulados (determinísticos, para as capturas; com 7 dias, os mesmos números de antes)
+  const P=s.periodo_dias||7, dd=i=>{const d=new Date(Date.now()-(P-1-i)*864e5);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}, B7=[9,12,0,0,11,15,14], F7=[0,1,0,0,0,2,1], m7=i=>((i-(P-7))%7+7)%7;
+  if(QS.has('manut')&&rel){const d=new Date(Date.now()+2*864e5);rel.status='manut';rel.status_real='error';rel.antigo=false;rel.manutencao={ate:d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' 18:00',motivo:'troca de credencial (exemplo)'}}   // ?demo=1&manut=1
+  [...s.agents,...s.crons].forEach((x,j)=>{x.tendencia=Array.from({length:P},(_,i)=>[Math.max(0,Math.round(B7[m7(i)]/(j+2))+((i+j)%3===0?1:0)),i===P-1&&x.status==='error'?1:0]);
+    const n=x.tendencia.reduce((a,v)=>a+v[0],0), f=x.tendencia.reduce((a,v)=>a+v[1],0); x.sucesso={execucoes:n,falhas:f,pct:n?Math.round(1000*(n-f)/n)/10:null,manutencao:x.status==='manut'?2:0};
+    if(x.kind==='agent'){x.runs_today=Math.max(x.runs_today||0,x.tendencia[P-1][0]);x.runs_total=Math.max(x.runs_total||0,n)}   // detalhe coerente com o gráfico
+    if(x.kind==='agent')x.custo={tokens:Math.round([412000,96000,1280000,58000,240000][j%5]*P/7),custo_usd:Math.round([0,0,3.42,0,0.61][j%5]*P/7*100)/100,execucoes:n,aprox:false}});
   if(s.equipe){s.equipe.vencidos=3;(s.equipe_estacao||[]).forEach(e=>{if(!e.decor)Object.assign(e,{vencidos:3,encerrados_7d:41,atendimento_medio_h:22.5,atendimento_mediano_h:9.2})})}
   s.kpis={running:3,runs_today:14,errors_today:1,in_error:1,late:[...s.agents,...s.crons].filter(atrasado).length,stuck:QS.has('travado')?1:0,agents:s.agents.length,crons:s.crons.length,last_activity:s.feed[0].ts,
-    tendencia:base7.map((v,i)=>({dia:dd(i),execucoes:i===6?14:v,falhas:fal7[i]})),custo_7d_usd:4.03};
+    tendencia:Array.from({length:P},(_,i)=>({dia:dd(i),execucoes:i===P-1?14:B7[m7(i)],falhas:F7[m7(i)]})),custo_usd:Math.round(4.03*P/7*100)/100,manut:[...s.agents,...s.crons].filter(x=>x.manutencao).length};
+  {const T=s.kpis.tendencia,n=T.reduce((a,x)=>a+x.execucoes,0),f=T.reduce((a,x)=>a+x.falhas,0);s.kpis.sucesso={execucoes:n,falhas:f,pct:Math.round(1000*(n-f)/n)/10}}
 }

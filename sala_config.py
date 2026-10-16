@@ -7,6 +7,8 @@ Chaves usadas:
   agidesk_keychain_service   serviço desse item (a chave só é lida em memória)
   equipe_id                  id da equipe no Agidesk cujos chamados a sala GOVERNANÇA mostra
   vault_path                 pasta do vault do Obsidian a contar (placa da DIRETORIA)
+  responsavel_padrao         (opcional) responsável de toda estação sem "responsavel" no agentes.json (server.py)
+  alerta_email               (opcional) {"para": um endereço só, "de", "conta_himalaya"}: e-mail do vigia_sala.py
 """
 import os, sys, json
 

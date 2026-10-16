@@ -218,6 +218,8 @@ def main():
             casos.append(("Modo TV · atrasado", "debug=1&tema=tv&demo=1&atrasado=1&seed=7&ff=%s" % ff))
             casos.append(("Pixel art · Modo TV · demonstração", "debug=1&tema=pixeltv&demo=1&atrasado=1&seed=4&ff=%s" % ff))
             casos.append(("nomes técnicos + modo lista", "debug=1&nomes=tecnicos&lista=1&demo=1&seed=8&ff=%s" % ff))
+            casos.append(("manutenção + 30 dias", "debug=1&demo=1&manut=1&periodo=30&seed=5&ff=%s" % ff))
+            casos.append(("manutenção + 90 dias + lista e CSV", "debug=1&demo=1&manut=1&periodo=90&lista=1&seed=9&ff=%s" % ff))
             for nome, q in casos:
                 linhas.append((nome,) + _rodar(porta, q, perfil, falhas, nome))
             falhas += teste_3d(porta, perfil)

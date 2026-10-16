@@ -29,7 +29,8 @@ class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="sala_teste_")
         self.orig = {k: getattr(server, k) for k in ("AGENTES", "LOGS", "JOBS", "EXEC_DB", "STATE_DB", "EQUIPE_JSON",
-                                                      "VAULT_CONT", "CLAUDE_USO", "rodando_agora", "sem_acao")}
+                                                      "VAULT_CONT", "CLAUDE_USO", "rodando_agora", "sem_acao",
+                                                      "HIST_CRON", "MANUT", "CONFIG")}
         os.makedirs(os.path.join(self.tmp, "logs"))
         server.AGENTES = os.path.join(self.tmp, "agentes.json")
         server.LOGS = os.path.join(self.tmp, "logs")
@@ -39,6 +40,10 @@ class Base(unittest.TestCase):
         server.EQUIPE_JSON = os.path.join(self.tmp, "equipe.json")
         server.VAULT_CONT = os.path.join(self.tmp, "vault.json")
         server.CLAUDE_USO = os.path.join(self.tmp, "claude.json")
+        server.HIST_CRON = os.path.join(self.tmp, "historico_cron.jsonl")
+        server.MANUT = os.path.join(self.tmp, "manutencao.json")
+        server.CONFIG = os.path.join(self.tmp, "sala_config.json")
+        server._CUSTO.clear()
         server.rodando_agora = lambda: dict(self.rodando)
         server.sem_acao = lambda modelo, inicio: self.sem_acao
         server._cache_logs.clear()
@@ -67,9 +72,9 @@ class Base(unittest.TestCase):
                 f.write("===== %s · [Agente %s · modelo: %s%s] · código %d\nsaída qualquer\n" % (
                     quando, agente, modelo, " · ATENÇÃO: usou o modelo reserva" if aviso else "", codigo))
 
-    def estado(self):
+    def estado(self, dias=7):
         del server.SAUDE[:]
-        return json.loads(json.dumps(server.estado()))     # mesmo caminho do /api/state (tem de ser serializável)
+        return json.loads(json.dumps(server.estado(dias)))     # mesmo caminho do /api/state (tem de ser serializável)
 
 
 class Status(Base):
@@ -221,8 +226,8 @@ class Executor(Base):
         self.log("a", [(ts(300), "consulta_a", "m1", 0, False)])
         self.eventos([{"ev": "inicio", "agente": "consulta_a", "pid": 999991, "t": agora - 400},
                       {"ev": "fim", "agente": "consulta_a", "pid": 999991, "t": agora - 300, "codigo": 0, "duracao_s": 100, "sessoes": ["s1", "s2"]}])
-        server._CUSTO[0] = 0
-        c = next(x for x in self.estado()["agents"] if x["id"] == "consulta_a")["custo_7d"]
+        server._CUSTO.clear()
+        c = next(x for x in self.estado()["agents"] if x["id"] == "consulta_a")["custo"]
         self.assertEqual(c["tokens"], 5820)
         self.assertAlmostEqual(c["custo_usd"], 0.51)
         self.assertFalse(c["aprox"])
@@ -237,6 +242,209 @@ class Executor(Base):
         self.assertEqual(next(x for x in s["agents"] if x["id"] == "consulta_a")["tendencia"][-1], [1, 1])
         sexta = datetime(2026, 10, 16, 12).timestamp(); segunda = datetime(2026, 10, 19, 12).timestamp()
         self.assertAlmostEqual(server.uteis_s(sexta, segunda), 86400, delta=3700)    # sábado e domingo não contam (1 h de folga: horário de verão)
+
+
+class Indicadores(Base):
+    """Período (7 a 90 dias), índice de sucesso, histórico próprio dos jobs, manutenção e responsável (16/10/2026)."""
+
+    def job(self, nome="rotina", **extra):
+        j = {"id": "j-" + nome, "name": nome, "enabled": True, "schedule": {"expr": "0 * * * *"}, "next_run_at": iso(-1800),
+             "last_run_at": iso(1800), "last_status": "ok", "script": "x.py"}
+        j.update(extra)
+        return j
+
+    def hist_cron(self, linhas):
+        with open(server.HIST_CRON, "w", encoding="utf8") as f:
+            for jid, st, ini_s, dur_s in linhas:
+                f.write(json.dumps({"job_id": jid, "job": "", "status": st, "started_at": iso(ini_s), "finished_at": iso(ini_s - dur_s)}) + "\n")
+
+    def test_periodo_e_indice_de_sucesso(self):
+        self.log("a", [(ts(40 * 86400), "consulta_a", "m1", 0, False), (ts(10 * 86400), "consulta_a", "m1", 1, False),
+                       (ts(2 * 86400), "consulta_a", "m1", 0, False)])
+        for dias, esp in ((7, (1, 0, 100.0)), (15, (2, 1, 50.0)), (90, (3, 1, 66.7))):
+            s = self.estado(dias)
+            a = next(x for x in s["agents"] if x["id"] == "consulta_a")
+            su = a["sucesso"]
+            self.assertEqual((su["execucoes"], su["falhas"], su["pct"]), esp, dias)
+            self.assertEqual(len(a["tendencia"]), dias)
+            self.assertEqual(len(s["kpis"]["tendencia"]), dias)
+            self.assertEqual(s["periodo_dias"], dias)
+            self.assertEqual(s["kpis"]["sucesso"]["execucoes"], esp[0])
+        b = next(x for x in self.estado(90)["agents"] if x["id"] == "consulta_b")
+        self.assertIsNone(b["sucesso"]["pct"])                                   # sem execução: sem índice (não é 0% nem 100%)
+
+    def test_historico_proprio_dos_jobs(self):
+        self.jobs([self.job()])
+        self.hist_cron([("j-rotina", "completed", 20 * 86400, 60), ("j-rotina", "failed", 3 * 86400, 2),
+                        ("j-rotina", "completed", 5 * 86400, 1)])                 # 1 s: só checou se era hora (não conta)
+        for dias, esp in ((7, (1, 1)), (30, (2, 1))):
+            c = self.estado(dias)["crons"][0]
+            self.assertEqual((c["sucesso"]["execucoes"], c["sucesso"]["falhas"]), esp, dias)
+            self.assertEqual(sum(x[0] for x in c["tendencia"]), esp[0])
+        with open(server.HIST_CRON, "a", encoding="utf8") as f:
+            f.write("linha quebrada\n")
+        self.assertEqual(self.estado(30)["crons"][0]["sucesso"]["execucoes"], 2)  # linha ilegível é ignorada
+
+    def test_manutencao(self):
+        agora = datetime.now()
+        f = lambda d: (agora + timedelta(hours=d)).strftime("%Y-%m-%d %H:%M")
+        self.catalogo({"consulta_a": {"modelo": "m1"}, "consulta_b": {"modelo": "m2"}, "diario": {"modelo": "m", "cadencia_h": 24}})
+        self.log("b", [(ts(3 * 86400), "consulta_b", "m2", 1, False), (ts(600), "consulta_b", "m2", 1, False)])
+        self.log("d", [(ts(4 * 86400), "diario", "m", 0, False)])
+        self.jobs([self.job("atrasado", next_run_at=iso(7200))])
+        self.gravar(server.MANUT, {"janelas": [
+            {"id": "consulta_b", "de": f(-1), "ate": f(24), "motivo": "troca de senha"},
+            {"id": "diario", "de": f(-1), "ate": f(24)}, {"id": "cron:atrasado", "de": f(-1), "ate": f(24)},
+            {"id": "consulta_a", "de": f(-48), "ate": f(-24)}]})                   # janela que já acabou: sem efeito
+        s = self.estado()
+        a = {x["id"]: x for x in s["agents"] + s["crons"]}
+        self.assertEqual(a["consulta_b"]["status"], "manut")
+        self.assertEqual(a["consulta_b"]["status_real"], "error")
+        self.assertEqual(a["consulta_b"]["manutencao"]["motivo"], "troca de senha")
+        self.assertEqual((a["consulta_b"]["sucesso"]["execucoes"], a["consulta_b"]["sucesso"]["manutencao"]), (1, 1))  # a falha de dentro da janela fica fora
+        self.assertIsNone(a["diario"]["atrasado_s"])
+        self.assertIsNone(a["cron:atrasado"]["atrasado_s"])
+        self.assertIsNone(a["consulta_a"]["manutencao"])
+        self.assertEqual((s["kpis"]["in_error"], s["kpis"]["late"], s["kpis"]["manut"]), (0, 0, 3))
+        self.rodando = {"consulta_b": 30}                                         # rodando continua rodando, mesmo em manutenção
+        self.assertEqual(next(x for x in self.estado()["agents"] if x["id"] == "consulta_b")["status"], "running")
+        self.gravar(server.MANUT, {"janelas": [{"id": "consulta_b", "de": "ontem", "ate": f(1)}]})
+        self.rodando = {}
+        s = self.estado()
+        self.assertEqual(next(x for x in s["agents"] if x["id"] == "consulta_b")["status"], "error")
+        self.assertTrue(any(x["fonte"] == "manutenção" for x in s["saude"]))     # data inválida: avisa, não quebra
+
+    def test_responsavel(self):
+        self.catalogo({"consulta_a": {"modelo": "m1", "responsavel": "Pessoa B"}, "consulta_b": {"modelo": "m2"}})
+        self.jobs([self.job()])
+        s = self.estado()
+        self.assertTrue(all(x["responsavel"] is None for x in s["agents"] if x["id"] != "consulta_a"))
+        self.gravar(server.CONFIG, {"responsavel_padrao": "Pessoa A"})
+        r = {x["id"]: x["responsavel"] for x in self.estado()["agents"] + self.estado()["crons"]}
+        self.assertEqual(r, {"consulta_a": "Pessoa B", "consulta_b": "Pessoa A", "cron:rotina": "Pessoa A"})
+
+
+class Vigia(Base):
+    """vigia_sala.py: histórico próprio dos jobs e alerta por e-mail (himalaya falso, nada real é lido nem enviado)."""
+
+    def setUp(self):
+        super().setUp()
+        import sqlite3
+        # o vigia roda em processo próprio com HOME = pasta do teste: logs e banco do cron ficam onde ele procura
+        server.LOGS = os.path.join(self.tmp, ".hermes", "data", "agentes")
+        os.makedirs(server.LOGS)
+        os.makedirs(os.path.join(self.tmp, ".hermes", "cron"))
+        server.EXEC_DB = os.path.join(self.tmp, ".hermes", "cron", "executions.db")
+        con = sqlite3.connect(server.EXEC_DB)
+        con.execute("create table executions (job_id text, status text, pid int, started_at text, finished_at text, error text, claimed_at text)")
+        con.executemany("insert into executions values (?,?,?,?,?,?,?)", [
+            ("j-rotina", "completed", 1, iso(3600), iso(3500), None, iso(3600)),          # trabalhou 100 s
+            ("j-rotina", "completed", 1, iso(1800), iso(1799.8), None, iso(1800)),        # só checou
+            ("j-rotina", "failed", 1, iso(900), iso(899), "x", iso(900)),
+            ("j-apoio", "completed", 1, iso(600), iso(500), None, iso(600))])              # job oculto da Sala
+        con.commit(); con.close()
+        self.jobs([{"id": "j-rotina", "name": "rotina", "enabled": True, "schedule": {"expr": "0 * * * *"}, "script": "x.py",
+                    "next_run_at": iso(-1800), "last_run_at": iso(900), "last_status": "ok"},
+                   {"id": "j-apoio", "name": "govti-vault-contagem", "enabled": True, "schedule": {"expr": "*/5 * * * *"}, "script": "y.py"}])
+        self.enviados = os.path.join(self.tmp, "enviados.txt")
+        self.himalaya = os.path.join(self.tmp, "himalaya")
+        with open(self.himalaya, "w") as f:
+            f.write("#!/bin/sh\n[ -f %s/falhar ] && exit 1\necho '-----' >> %s\ncat >> %s\n" % (self.tmp, self.enviados, self.enviados))
+        os.chmod(self.himalaya, 0o755)
+        self.gravar(server.CONFIG, {"alerta_email": {"para": "alguem@exemplo.com", "de": "sala@exemplo.com", "himalaya": self.himalaya}})
+
+    def vigia(self):
+        import subprocess
+        env = dict(os.environ, HOME=self.tmp, SALA_AGENTES=server.AGENTES, SALA_JOBS=server.JOBS, SALA_HIST_CRON=server.HIST_CRON,
+                   SALA_MANUT=server.MANUT, SALA_CONFIG=server.CONFIG, SALA_ALERTA_BASE=os.path.join(self.tmp, "base.json"))
+        return subprocess.run([sys.executable, os.path.join(AQUI, "vigia_sala.py")], env=env, capture_output=True, text=True)
+
+    def emails(self):
+        return open(self.enviados, encoding="utf8").read().split("-----\n")[1:] if os.path.exists(self.enviados) else []
+
+    def test_historico(self):
+        r = self.vigia()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        h = [json.loads(l) for l in open(server.HIST_CRON, encoding="utf8")]
+        self.assertEqual(sorted(x["status"] for x in h), ["completed", "failed"])   # sem a checagem de 0,2 s e sem o job oculto
+        self.vigia()
+        self.assertEqual(len(open(server.HIST_CRON, encoding="utf8").readlines()), 2)  # rodar de novo não duplica
+        with open(server.HIST_CRON, "a", encoding="utf8") as f:                         # 120 dias atrás: descartada na próxima rodada
+            f.write(json.dumps({"job_id": "j-rotina", "job": "rotina", "status": "completed", "started_at": iso(120 * 86400), "finished_at": iso(120 * 86400 - 60)}) + "\n")
+        self.vigia()
+        self.assertEqual(len(open(server.HIST_CRON, encoding="utf8").readlines()), 2)
+
+    def test_alerta_por_email(self):
+        self.log("a", [(ts(3600), "consulta_a", "m1", 0, False)])
+        r = self.vigia()
+        self.assertIn("base inicial", r.stdout)
+        self.assertEqual(self.emails(), [])                                           # 1ª rodada: só a base
+        self.log("a", [(ts(3600), "consulta_a", "m1", 0, False), (ts(60), "consulta_a", "m1", 2, False)])
+        self.vigia()
+        e = self.emails()
+        self.assertEqual(len(e), 1)
+        self.assertIn("Subject: [Sala] FALHA: consulta_a", e[0])
+        self.assertIn("To: alguem@exemplo.com", e[0])
+        self.assertNotIn("saída qualquer", e[0])                                      # nunca o conteúdo do log
+        self.vigia()
+        self.assertEqual(len(self.emails()), 1)                                       # nada novo: nada enviado
+        self.log("a", [(ts(3600), "consulta_a", "m1", 0, False), (ts(60), "consulta_a", "m1", 2, False), (ts(5), "consulta_a", "m1", 0, False)])
+        self.vigia()
+        self.assertIn("Subject: [Sala] Normalizado: consulta_a", self.emails()[1])
+        # em manutenção: falha não alerta
+        self.gravar(server.MANUT, {"janelas": [{"id": "consulta_b", "de": "2000-01-01 00:00", "ate": "2999-01-01 00:00"}]})
+        self.log("b", [(ts(4), "consulta_b", "m2", 1, False)])
+        self.vigia()
+        self.assertEqual(len(self.emails()), 2)
+        # envio falhou: código 1 e a mesma novidade vai na rodada seguinte
+        open(os.path.join(self.tmp, "falhar"), "w").close()
+        self.log("a", [(ts(3), "consulta_a", "m1", 5, False)])
+        self.assertEqual(self.vigia().returncode, 1)
+        os.remove(os.path.join(self.tmp, "falhar"))
+        self.assertEqual(self.vigia().returncode, 0)
+        self.assertIn("Subject: [Sala] FALHA: consulta_a", self.emails()[2])
+
+    def test_email_de_teste(self):
+        import subprocess
+        env = dict(os.environ, HOME=self.tmp, SALA_CONFIG=server.CONFIG, SALA_ALERTA_BASE=os.path.join(self.tmp, "base.json"))
+        r = subprocess.run([sys.executable, os.path.join(AQUI, "vigia_sala.py"), "--teste"], env=env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("Subject: [Sala] Teste do aviso por e-mail", self.emails()[0])
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "base.json")))         # o teste não mexe na base
+
+    def test_um_destinatario_so(self):
+        self.gravar(server.CONFIG, {"alerta_email": {"para": "a@exemplo.com, b@exemplo.com", "himalaya": self.himalaya}})
+        r = self.vigia()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("UM endereço", r.stdout + r.stderr)
+        self.assertEqual(self.emails(), [])
+
+    def test_sem_config_de_email(self):
+        os.remove(server.CONFIG)
+        r = self.vigia()
+        self.assertEqual(r.returncode, 0)
+        self.assertTrue(os.path.exists(server.HIST_CRON))                              # o histórico continua
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "base.json")))
+
+
+class Manutencao(Base):
+    def rodar(self, *a):
+        import subprocess
+        env = dict(os.environ, HOME=self.tmp, SALA_AGENTES=server.AGENTES, SALA_JOBS=server.JOBS, SALA_MANUT=server.MANUT)
+        return subprocess.run([sys.executable, os.path.join(AQUI, "manutencao.py")] + list(a), env=env, capture_output=True, text=True)
+
+    def test_iniciar_listar_encerrar(self):
+        self.assertEqual(self.rodar("iniciar", "nao_existe", "--ate", "+2h").returncode, 2)
+        self.assertEqual(self.rodar("iniciar", "consulta_a", "--ate", "amanhã").returncode, 2)
+        r = self.rodar("iniciar", "consulta_a", "--ate", "+2d", "--motivo", "troca de senha")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        s = self.estado()
+        a = next(x for x in s["agents"] if x["id"] == "consulta_a")
+        self.assertEqual(a["manutencao"]["motivo"], "troca de senha")
+        self.assertIn("ATIVA", self.rodar("listar").stdout)
+        self.assertEqual(self.rodar("encerrar", "consulta_a").returncode, 0)
+        self.assertIsNone(next(x for x in self.estado()["agents"] if x["id"] == "consulta_a")["manutencao"])
+        self.assertEqual(self.rodar("encerrar", "consulta_a").returncode, 1)
 
 
 class Privacidade(Base):
@@ -272,7 +480,7 @@ class Servidor(Base):
             return e.code
 
     def test_travas(self):
-        server._CACHE[0] = 0
+        server._CACHE.clear()
         self.assertEqual(self.codigo("/api/state"), 200)
         self.assertEqual(self.codigo("/api/state", host="site-de-fora.exemplo"), 403)
         for c in ("/web/../server.py", "/web/%2e%2e/server.py", "/web/js/../../layout.json"):

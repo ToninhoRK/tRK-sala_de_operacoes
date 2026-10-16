@@ -46,6 +46,7 @@ Um objeto com uma entrada por agente. A chave é o id do agente (letras minúscu
 | `cadencia_h` | o agente deve rodar ao menos a cada N horas: passou de 1,2 × N sem rodar, ele fica **atrasado** |
 | `cadencia_dias_uteis` | com `true`, sábado e domingo não contam para a cadência |
 | `cron_job` | nome de um job em `jobs.json` que faz o trabalho do agente sem passar por ele: a estação mostra a execução mais nova dos dois |
+| `responsavel` | quem responde pelo agente (detalhe, lista e CSV); sem ele, vale o `responsavel_padrao` da configuração local |
 
 Campos desconhecidos são ignorados.
 
@@ -135,3 +136,22 @@ Hermes; sem ele, o job aparece só com o estado do `jobs.json`.
   15 min aparece como defasada.
 - `vault_contagem.json`: `{"updated_at": <unix>, "total": 904, "historico": {...}, "auditoria": {"divergencias": 0, "checado_em": <unix>}}`.
 - `claude_uso.json`: `{"updated_at": <unix>, "five_hour": {"used_percentage": 34, "resets_at": <unix>}, "seven_day": {...}}`.
+
+## Gravados pela própria sala
+
+- `sala_historico_cron.jsonl` (gravado pelo `vigia_sala.py`): uma linha por execução de job que trabalhou (> 5 s) ou falhou,
+  `{"job_id": "...", "job": "nome", "status": "completed|failed", "started_at": "<ISO 8601>", "finished_at": "<ISO 8601>"}`.
+  Guarda 100 dias. O banco de execuções do Hermes guarda só as últimas ~1000 (uns 2 dias); sem este arquivo, os períodos
+  longos dos jobs mostram só esses dias.
+- `sala_manutencao.json` (gravado pelo `manutencao.py`): `{"janelas": [{"id": "agente ou cron:<job>", "de": "AAAA-MM-DD HH:MM",
+  "ate": "AAAA-MM-DD HH:MM", "motivo": "..."}]}`. Dentro da janela, a estação aparece como MANUTENÇÃO, falha e atraso não
+  alarmam e as execuções ficam fora do índice de sucesso. Janelas encerradas há mais de 120 dias são descartadas.
+- `sala_alerta_base.json` (gravado pelo `vigia_sala.py`): o retrato da rodada anterior, para o e-mail sair só quando algo muda.
+
+## Configuração local: `sala_config.json`
+
+Fica fora do repositório (modelo em `config.exemplo.json`). Além das chaves do Agidesk e do vault:
+
+- `responsavel_padrao`: responsável de toda estação sem `responsavel` próprio.
+- `alerta_email`: `{"para": "um endereço só", "de": "remetente", "conta_himalaya": "conta de envio"}`. Sem esta chave, o vigia
+  só guarda o histórico. Mais de um endereço em `para` é recusado.
