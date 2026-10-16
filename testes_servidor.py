@@ -179,6 +179,27 @@ class Executor(Base):
         self.assertTrue(s["kpis"]["eventos_executor"])
         self.assertNotIn("desconhecido", json.dumps(s["agents"]))
 
+    def test_embrulho_registrar_execucao(self):
+        """registrar_execucao.py (agentes sem o Hermes, ex.: Claude Code): OK, falha e a saída do comando nunca gravada."""
+        import subprocess
+        server.LOGS = os.path.join(self.tmp, ".hermes", "data", "agentes")          # onde o embrulho grava, com HOME = pasta do teste
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "registrar_execucao.py")
+        rodar = lambda *a: subprocess.run([sys.executable, script] + list(a), env=dict(os.environ, HOME=self.tmp),
+                                          capture_output=True, text=True)       # processo próprio, como no uso real
+        ok = rodar("consulta_a", "--modelo", "m1", "--", sys.executable, "-c", "print('resposta-secreta')")
+        falha = rodar("consulta_b", "--", sys.executable, "-c", "raise SystemExit(3)")
+        self.assertEqual((ok.returncode, falha.returncode), (0, 3))
+        self.assertIn("resposta-secreta", ok.stdout)                                  # a saída aparece no terminal...
+        self.assertEqual(rodar("consulta_a").returncode, 2)                          # sem "--": só mostra o uso
+        s = self.estado()
+        a = {x["id"]: x for x in s["agents"]}
+        self.assertEqual(a["consulta_a"]["status"], "ok")
+        self.assertEqual(a["consulta_a"]["last"]["model"], "m1")
+        self.assertIsNotNone(a["consulta_a"]["last"].get("dur"))
+        self.assertEqual(a["consulta_b"]["status"], "error")
+        gravado = "".join(open(os.path.join(server.LOGS, f), encoding="utf8").read() for f in os.listdir(server.LOGS))
+        self.assertNotIn("resposta-secreta", gravado)                                  # ...mas nunca é gravada
+
     def test_custo_exato_pelo_evento(self):
         import sqlite3
         server.STATE_DB = os.path.join(self.tmp, "state.db")

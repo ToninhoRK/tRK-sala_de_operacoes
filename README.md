@@ -2,7 +2,7 @@
 
 🇧🇷 **Português** · 🇺🇸 [English](README.en.md)
 
-**Veja seus agentes de I.A. trabalhando.** A Sala de Operações transforma agentes, rotinas agendadas e a fila da equipe num escritório vivo, em que cada agente é um funcionário com mesa própria. Quem está rodando aparece sentado, digitando. Quem falhou se levanta e pede ajuda. Basta olhar para saber como a operação está, sem abrir log nem terminal.
+**Veja seus agentes de I.A. trabalhando.** A Sala de Operações transforma agentes, rotinas agendadas e a fila da equipe num escritório vivo, em que cada agente é um funcionário com mesa própria. Quem está rodando aparece sentado, digitando. Quem falhou se levanta e pede ajuda. Basta olhar para saber como a operação está, sem abrir log nem terminal. Funciona com o **Hermes** e com o **Claude Code**.
 
 ![Sala de Operações: planta isométrica com salas, mesas e um funcionário por agente](docs/sala-de-operacoes.png)
 
@@ -16,6 +16,7 @@
 - [Destaques](#destaques)
 - [Requisitos](#requisitos)
 - [Comece em um minuto](#comece-em-um-minuto)
+- [Com o Claude Code](#com-o-claude-code)
 - [Personalize](#personalize)
 - [Privacidade e segurança](#privacidade-e-segurança)
 - [Qualidade](#qualidade)
@@ -61,7 +62,10 @@ No topo, um veredito responde antes de tudo: **NORMAL**, **ATENÇÃO** ou **FALH
 
 ## Destaques
 
-- **Trabalho passando de mão em mão:** quando um agente de uma cadeia começa a rodar, o funcionário da etapa anterior leva uma pasta até a mesa dele. Dá para ver a entrega de dados acontecer entre as salas.
+- **Trabalho passando de mão em mão:** as estações de uma cadeia são ligadas por linhas que acendem quando a origem roda. Quando um agente da cadeia começa a rodar, o funcionário da etapa anterior leva uma pasta até a mesa dele: dá para ver a entrega de dados acontecer entre as salas.
+- **O que ele está fazendo agora:** clique no funcionário de um agente e veja, ao vivo, a hora e o nome de cada ferramenta que ele usa. Só o nome da ferramenta: nada do que foi perguntado ou respondido.
+- **O cérebro também tem mesa:** o Hermes principal é o Jarvis, um robô na Diretoria, que mostra **ATENDENDO VOCÊ** quando você está conversando com ele.
+- **Painéis na parede:** o total de notas do seu vault do Obsidian (quantas entraram hoje e na semana, e o resultado da auditoria) e os totais da fila da equipe ficam pendurados nas salas, como num escritório de verdade.
 - **Rotina atrasada não passa despercebida:** se um job agendado não disparou na hora (ou um agente passou do intervalo combinado sem rodar), a estação fica âmbar e o alarme avisa. Verde só quando está realmente em dia.
 - **Alerta sonoro:** um som curto quando algo falha, trava ou atrasa, e outro mais suave quando volta ao normal. A sala continua de olho mesmo com a aba em segundo plano.
 - **Atividade sem ruído:** execuções repetidas viram uma linha só ("×6 · desde 09:00"), o destaque fica só para o que fugiu do normal e um clique mostra **só as exceções**.
@@ -82,7 +86,8 @@ No topo, um veredito responde antes de tudo: **NORMAL**, **ATENÇÃO** ou **FALH
 |---|---|
 | Rodar a sala | **Python 3.9 ou mais novo** (testada no 3.9 e no 3.14; só a biblioteca padrão, nada para instalar com pip) |
 | Ver a sala | um navegador atual. Testada no **Google Chrome**; Edge usa o mesmo motor. O tema 3D precisa de WebGL, que os navegadores atuais já trazem ligado |
-| Dados de verdade | o **[Hermes](https://hermes-agent.nousresearch.com/docs)** instalado na mesma máquina. Sem ele, a sala abre com agentes de exemplo |
+| Dados de verdade | o **[Hermes](https://hermes-agent.nousresearch.com/docs)** ou o **[Claude Code](https://code.claude.com/docs)** na mesma máquina (ou qualquer comando, [pelo embrulho](#com-o-claude-code)). Sem nenhum deles, a sala abre com agentes de exemplo |
+| Consumo do Claude no topo (opcional) | o **Claude Code** com login por assinatura (Pro ou Max) |
 | Fila da equipe (opcional) | uma conta no **Agidesk** com chave de API, guardada no Keychain do macOS |
 | Rodar os testes | o **Google Chrome** (o teste abre a página num Chrome invisível) |
 
@@ -98,9 +103,33 @@ python3 server.py
 
 Abra **http://127.0.0.1:8765** no navegador. Para ver todos os estados em ação, use **http://127.0.0.1:8765/?demo=1**.
 
-Os dados vêm do [Hermes](https://hermes-agent.nousresearch.com/docs). Sem ele instalado, a sala abre com os agentes de exemplo da pasta `exemplo/`.
+Com o [Hermes](https://hermes-agent.nousresearch.com/docs) instalado, os agentes e as rotinas dele aparecem sozinhos. Sem ele, a sala abre com os agentes de exemplo da pasta `exemplo/`.
 
-**Usa outro orquestrador?** A sala só lê alguns arquivos simples (catálogo em JSON e uma linha de log por execução). O [formato de entrada](docs/FORMATO.md) explica cada um e traz um embrulho de 15 linhas que transforma qualquer comando num agente da sala.
+## Com o Claude Code
+
+A sala também acompanha agentes do **Claude Code** rodando sem tela (`claude -p`), chamados à mão ou por qualquer agendador (cron, launchd, Agendador de Tarefas). O `registrar_execucao.py` roda o comando e registra início, fim e resultado. A resposta aparece no terminal e nunca é gravada.
+
+1. Cadastre o agente no catálogo `~/.hermes/scripts/agentes.json` (o nome da pasta vem do Hermes, mas ele não precisa estar instalado):
+
+```json
+{"resumo_diario": {"descricao": "Resume os chamados abertos do dia", "modelo": "claude-sonnet", "cadencia_h": 24}}
+```
+
+2. Rode o agente pelo embrulho:
+
+```bash
+python3 registrar_execucao.py resumo_diario --modelo claude-sonnet -- claude -p "Resuma os chamados abertos hoje"
+```
+
+3. Opcional, para ver o consumo do plano no topo: em `~/.claude/settings.json`, aponte a barra de status do Claude Code para o `claude_statusline.py` da sala. Ela passa a mostrar o uso da sessão de 5 h e da semana, e a sala lê o mesmo número (só o percentual e a hora de reinício são gravados).
+
+```json
+{"statusLine": {"type": "command", "command": "python3 /caminho/da/sala/claude_statusline.py"}}
+```
+
+Sem o Hermes, funcionam igual: estação, estado, histórico, duração, falhas, execuções interrompidas, atraso (pela `cadencia_h`), pasta entre salas e consumo do plano. Ficam de fora o quadro do que o agente está fazendo agora, o aviso de "sem ação", tokens e custo por agente, o Jarvis e a sala do agendador, que lê as rotinas do Hermes (rotinas do cron entram como agentes, com o atraso pela `cadencia_h`).
+
+**Usa outro orquestrador?** A sala só lê alguns arquivos simples (catálogo em JSON e uma linha de log por execução). O [formato de entrada](docs/FORMATO.md) explica cada um; o mesmo `registrar_execucao.py` transforma qualquer comando num agente da sala.
 
 ## Personalize
 
@@ -112,6 +141,7 @@ Os dados vêm do [Hermes](https://hermes-agent.nousresearch.com/docs). Sem ele i
 ## Privacidade e segurança
 
 - **Roda só no seu computador:** o servidor só aceita conexões do próprio computador (`127.0.0.1`).
+- **Sites de fora não leem a sala:** pedidos com endereço diferente de `127.0.0.1` ou `localhost` são recusados, então uma página maliciosa aberta no navegador não consegue ler os dados da sala.
 - **Somente leitura:** a sala só observa os agentes, nunca dispara nem altera nada.
 - **Zero tokens:** a sala não usa modelo de I.A. e só lê históricos e arquivos de estado.
 - **O conteúdo fica onde está:** o navegador recebe nome do agente, horário, modelo e resultado. Perguntas e respostas dos agentes nunca saem do lugar onde estão.
@@ -120,7 +150,7 @@ Os dados vêm do [Hermes](https://hermes-agent.nousresearch.com/docs). Sem ele i
 
 Dois níveis de teste acompanham o projeto:
 
-- `python3 testes_servidor.py`: em cerca de um segundo, confere a lógica do servidor com dados fictícios (estados, atraso, início e fim de execução, consumo, privacidade da equipe e as travas de segurança). Roda também no GitHub a cada envio, em Python 3.9 e 3.13.
+- `python3 testes_servidor.py`: em cerca de um segundo, confere a lógica do servidor com dados fictícios (estados, atraso, início e fim de execução, o embrulho `registrar_execucao.py`, consumo, privacidade da equipe e as travas de segurança). Roda também no GitHub a cada envio, em Python 3.9 e 3.13.
 - `python3 testar_sala.py`: abre a página num navegador em vários cenários (dados reais, demonstração, Modo TV, 3D, pixel art, a pasta entre salas, atrasos, agentes novos e falhas) e reprova qualquer rótulo sobreposto, objeto fora do lugar, erro de script ou dado individual da equipe.
 - `python3 .github/checar_readmes.py`: confere que este README e a versão em inglês têm as mesmas seções, capturas, tabelas e links. Roda no GitHub a cada envio, para as duas versões nunca ficarem diferentes.
 

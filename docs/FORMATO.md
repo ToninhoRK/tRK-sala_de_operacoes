@@ -82,33 +82,20 @@ sistema e não há duração nem execuções interrompidas.
 `t` é o horário Unix em segundos. `sessoes` é opcional: no Hermes, são os ids da tabela `sessions` do `state.db`, de onde
 saem tokens e custo exatos.
 
-### Sem o Hermes: um embrulho de 15 linhas
+### Sem o Hermes: `registrar_execucao.py`
 
-O script abaixo roda qualquer comando como se fosse um agente e grava os dois arquivos. Uso:
-`python3 registrar_execucao.py consulta_estoque meu_comando --com --argumentos`.
+O `registrar_execucao.py`, na pasta da sala, roda qualquer comando como se fosse um agente e grava os dois arquivos
+(evento de início e fim + cabeçalho no log). A saída do comando aparece no terminal e não é gravada. Exemplo com um agente
+do Claude Code:
 
-```python
-import json, os, subprocess, sys, time
-from datetime import datetime
-
-agente, comando = sys.argv[1], sys.argv[2:]
-pasta = os.path.expanduser("~/.hermes/data/agentes")
-os.makedirs(pasta, exist_ok=True)
-
-def evento(**d):
-    with open(os.path.join(pasta, "eventos.jsonl"), "a", encoding="utf8") as f:
-        f.write(json.dumps(dict(d, agente=agente, pid=os.getpid(), t=time.time())) + "\n")
-
-evento(ev="inicio")
-t0 = time.time()
-codigo = subprocess.call(comando)
-with open(os.path.join(pasta, agente + ".log"), "a", encoding="utf8") as f:
-    f.write(f"\n===== {datetime.now():%Y-%m-%d %H:%M:%S} · [Agente {agente} · modelo: meu-modelo] · código {codigo}\n")
-evento(ev="fim", codigo=codigo, duracao_s=round(time.time() - t0, 1))
-sys.exit(codigo)
+```bash
+python3 registrar_execucao.py resumo_diario --modelo claude-sonnet -- claude -p "Resuma os chamados abertos hoje"
 ```
 
-O agente também precisa estar no `agentes.json`.
+- O código de saída do comando vira o resultado (0 = OK). Interrompido por Ctrl+C ou `kill`, o sinal é repassado ao
+  comando e aos filhos dele e a execução é registrada como falha (130 ou 143).
+- Comando inexistente = código 127. Sem `--modelo`, o modelo aparece como "—".
+- O agente também precisa estar no `agentes.json`.
 
 ## Rotinas agendadas: `jobs.json`
 
