@@ -115,7 +115,7 @@ The room also follows **Claude Code** agents running headless (`claude -p`), sta
 {"resumo_diario": {"descricao": "Resume os chamados abertos do dia", "modelo": "claude-sonnet", "cadencia_h": 24}}
 ```
 
-2. Run the agent through the wrapper:
+2. Run the agent through the wrapper. A name missing from the catalog is refused (exit code 2) before anything runs, so a typo never turns into runs the room never shows:
 
 ```bash
 python3 registrar_execucao.py resumo_diario --modelo claude-sonnet -- claude -p "Summarize today's open tickets"

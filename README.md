@@ -115,7 +115,7 @@ A sala também acompanha agentes do **Claude Code** rodando sem tela (`claude -p
 {"resumo_diario": {"descricao": "Resume os chamados abertos do dia", "modelo": "claude-sonnet", "cadencia_h": 24}}
 ```
 
-2. Rode o agente pelo embrulho:
+2. Rode o agente pelo embrulho. Nome fora do catálogo é recusado (código 2) sem rodar nada, para um erro de digitação não virar execuções que a sala nunca mostra:
 
 ```bash
 python3 registrar_execucao.py resumo_diario --modelo claude-sonnet -- claude -p "Resuma os chamados abertos hoje"

@@ -11,7 +11,7 @@ Uso:
   python3 registrar_execucao.py <agente> [--modelo <nome>] -- <comando> [argumentos...]
 Exemplo (Claude Code):
   python3 registrar_execucao.py consulta_estoque --modelo claude-sonnet -- claude -p "Resuma o estoque de hoje"
-O agente precisa estar no catálogo (~/.hermes/scripts/agentes.json ou o arquivo de SALA_AGENTES).
+O agente precisa estar no catálogo (~/.hermes/scripts/agentes.json ou o arquivo de SALA_AGENTES); senão o comando não roda (código 2).
 Runs any command as a Sala de Operações agent and records start, end, exit code and duration (output is never stored).
 """
 import json
@@ -23,6 +23,19 @@ import time
 from datetime import datetime
 
 PASTA = os.path.expanduser("~/.hermes/data/agentes")
+AQUI = os.path.dirname(os.path.abspath(__file__))
+
+
+def catalogo():
+    """O mesmo catálogo que o server.py lê: SALA_AGENTES, senão ~/.hermes/scripts/agentes.json, senão exemplo/agentes.json."""
+    c = os.environ.get("SALA_AGENTES") or os.path.expanduser("~/.hermes/scripts/agentes.json")
+    if not os.path.exists(c):
+        c = os.path.join(AQUI, "exemplo", "agentes.json")
+    try:
+        with open(c, encoding="utf8") as f:
+            return c, set(json.load(f))
+    except (OSError, ValueError):
+        return c, None                                       # catálogo ilegível: não dá para conferir, segue sem bloquear
 
 
 def main(argv):
@@ -36,6 +49,10 @@ def main(argv):
         modelo = opcoes[opcoes.index("--modelo") + 1]
     if not comando:
         print("faltou o comando depois de --", file=sys.stderr)
+        return 2
+    caminho, nomes = catalogo()
+    if nomes is not None and agente not in nomes:            # nome errado gravaria execuções que a sala nunca mostra
+        print("agente desconhecido: %s (não está em %s). Cadastre-o no catálogo; nada foi executado nem registrado." % (agente, caminho), file=sys.stderr)
         return 2
     os.makedirs(PASTA, exist_ok=True)
 

@@ -95,7 +95,7 @@ python3 registrar_execucao.py resumo_diario --modelo claude-sonnet -- claude -p 
 - O código de saída do comando vira o resultado (0 = OK). Interrompido por Ctrl+C ou `kill`, o sinal é repassado ao
   comando e aos filhos dele e a execução é registrada como falha (130 ou 143).
 - Comando inexistente = código 127. Sem `--modelo`, o modelo aparece como "—".
-- O agente também precisa estar no `agentes.json`.
+- O agente também precisa estar no `agentes.json` (ou no arquivo de `SALA_AGENTES`): nome fora do catálogo é recusado com código 2, sem rodar o comando e sem gravar nada.
 
 ## Rotinas agendadas: `jobs.json`
 

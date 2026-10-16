@@ -184,7 +184,7 @@ class Executor(Base):
         import subprocess
         server.LOGS = os.path.join(self.tmp, ".hermes", "data", "agentes")          # onde o embrulho grava, com HOME = pasta do teste
         script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "registrar_execucao.py")
-        rodar = lambda *a: subprocess.run([sys.executable, script] + list(a), env=dict(os.environ, HOME=self.tmp),
+        rodar = lambda *a: subprocess.run([sys.executable, script] + list(a), env=dict(os.environ, HOME=self.tmp, SALA_AGENTES=server.AGENTES),
                                           capture_output=True, text=True)       # processo próprio, como no uso real
         ok = rodar("consulta_a", "--modelo", "m1", "--", sys.executable, "-c", "print('resposta-secreta')")
         falha = rodar("consulta_b", "--", sys.executable, "-c", "raise SystemExit(3)")
@@ -199,6 +199,13 @@ class Executor(Base):
         self.assertEqual(a["consulta_b"]["status"], "error")
         gravado = "".join(open(os.path.join(server.LOGS, f), encoding="utf8").read() for f in os.listdir(server.LOGS))
         self.assertNotIn("resposta-secreta", gravado)                                  # ...mas nunca é gravada
+        fora = rodar("consulta_inexistente", "--", sys.executable, "-c", "print('nao-devia-rodar')")
+        self.assertEqual(fora.returncode, 2)                                          # fora do catálogo: recusa...
+        self.assertIn("desconhecido", fora.stderr)
+        self.assertNotIn("nao-devia-rodar", fora.stdout)                             # ...sem rodar o comando...
+        self.assertFalse(os.path.exists(os.path.join(server.LOGS, "consulta_inexistente.log")))
+        with open(os.path.join(server.LOGS, "eventos.jsonl"), encoding="utf8") as f:
+            self.assertNotIn("consulta_inexistente", f.read())                       # ...e sem registrar nada
 
     def test_custo_exato_pelo_evento(self):
         import sqlite3
