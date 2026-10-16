@@ -150,6 +150,11 @@ Hermes; sem ele, o job aparece só com o estado do `jobs.json`.
   e a hora do último aviso de cada estação (no máximo um aviso de problema por estação a cada 30 min).
 - `sala_vigia.json` (gravado pelo `vigia_sala.py` no início de cada rodada): `{"rodou_em": <unix>, "erro": null}`. Mais de
   15 min sem rodar (fora os 10 min depois de o Mac acordar) ou `erro` preenchido = "fonte com problema" na sala.
+- `sala_resumo.json` (gravado pelo `vigia_sala.py`): `{"semana": "AAAA-MM-DD"}`, a segunda-feira do último resumo semanal
+  enviado (um por semana, a partir de segunda 8h; `vigia_sala.py --resumo` manda na hora).
+
+Com o Hermes instalado, a sala também confere se existem o script de cada job ativo (em `~/.hermes/scripts/`), o
+`prompt` de cada agente (relativo à mesma pasta) e o script de `pos_validacao`: arquivo sumido = "fonte com problema".
 
 ## Configuração local: `sala_config.json`
 

@@ -13,11 +13,15 @@
    avança (a rodada seguinte tenta de novo) e o vigia sai com código 1.
    No máximo um aviso de problema por estação a cada 30 min (estação que oscila não vira uma enxurrada): o que acontecer
    dentro desse intervalo fica guardado e sai na primeira rodada depois dele. "Voltou ao normal" não espera.
+4. Resumo semanal por e-mail: na primeira rodada a partir de segunda-feira 8h, um e-mail com os últimos 7 dias (índice
+   de sucesso, falhas por estação, atrasos e manutenções agora e consumo por agente). Uma vez por semana
+   (~/.hermes/data/sala_resumo.json). `python3 vigia_sala.py --resumo` manda na hora.
 3. Sinal de vida: ~/.hermes/data/sala_vigia.json (rodou_em, erro). A Sala acusa "fonte com problema" se o vigia ficar mais
    de 15 min sem rodar ou se a última rodada deu erro.
 
 Uso: python3 vigia_sala.py            (silencioso quando não há novidade)
      python3 vigia_sala.py --teste    (manda um e-mail de teste pela conta configurada e sai)
+     python3 vigia_sala.py --resumo   (manda o resumo da semana agora e sai)
 Arquivos de teste: SALA_HIST_CRON, SALA_ALERTA_BASE, SALA_CONFIG, SALA_AGENTES, SALA_JOBS, SALA_MANUT (os mesmos do server.py).
 Sala de Operações watcher: keeps a 100-day job history (the Hermes database keeps ~2 days) and e-mails state changes.
 """
@@ -28,7 +32,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.message import EmailMessage
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
@@ -37,6 +41,8 @@ import server  # noqa: E402  (a mesma leitura do painel)
 
 BASE = os.environ.get("SALA_ALERTA_BASE") or os.path.join(server.HERMES, "data", "sala_alerta_base.json")
 INTERVALO_AVISO_S = 1800      # um aviso de problema por estação a cada 30 min, no máximo
+RESUMO = os.environ.get("SALA_RESUMO") or os.path.join(server.HERMES, "data", "sala_resumo.json")
+RESUMO_DIA, RESUMO_HORA = 0, 8   # segunda-feira, 8h
 GUARDA_DIAS = 100
 ENDERECO_SALA = "http://127.0.0.1:8765"
 
@@ -80,14 +86,15 @@ def coletar_historico():
     novos = []
     for jid, st, ini, fim in linhas_db:
         nome = nomes.get(jid, "")
-        if (jid, ini) in chaves or nome in server.JOBS_OCULTOS or nome.startswith("avulso-"):
-            continue
+        if (jid, ini) in chaves or nome in server.JOBS_OCULTOS or nome.startswith("avulso-") or (nomes and jid not in nomes):
+            continue                                       # job que não existe mais no jobs.json: a Sala nunca o mostra
         e = {"job_id": jid, "job": nome, "status": st, "started_at": ini, "finished_at": fim}
         if st == "failed" or server.dur(e) > 5:
             novos.append(e)
             chaves.add((jid, ini))
     corte = time.time() - GUARDA_DIAS * 86400
-    manter = [d for d in guardadas if (server.iso_epoch(d.get("started_at")) or 0) >= corte]
+    manter = [d for d in guardadas if (server.iso_epoch(d.get("started_at")) or 0) >= corte
+              and (not nomes or d.get("job_id") in nomes)]      # jobs.json ilegível (nomes vazio): não descarta nada
     if novos or len(manter) != len(guardadas):
         todas = sorted(manter + novos, key=lambda d: d["started_at"])
         gravar_atomico(server.HIST_CRON, "".join(json.dumps(d, ensure_ascii=False) + "\n" for d in todas))
@@ -225,6 +232,46 @@ def separar(ev, a, b, agora):
     return enviar_ev, gravar
 
 
+def resumo_devido(agora, ultimo):
+    """True se já passou de segunda 8h desta semana e o resumo desta semana ainda não saiu (ultimo = data AAAA-MM-DD da segunda)."""
+    seg = (agora - timedelta(days=agora.weekday())).replace(hour=RESUMO_HORA, minute=0, second=0, microsecond=0)
+    return agora >= seg and ultimo != seg.strftime("%Y-%m-%d")
+
+
+def montar_resumo(s):
+    k, P = s["kpis"], s.get("periodo_dias", 7)
+    su = k.get("sucesso") or {}
+    pct = lambda v: "—" if v is None else ("%.1f%%" % v).replace(".", ",")
+    itens = s["agents"] + s["crons"]
+    nome = lambda x: x.get("titulo") or x["id"]
+    L = ["Sala de Operações · resumo dos últimos %d dias (até %s)" % (P, datetime.now().strftime("%d/%m/%Y %H:%M")), "",
+         "Índice de sucesso: %s (%d execuções, %d falha(s); janelas de manutenção fora da conta)" % (pct(su.get("pct")), su.get("execucoes") or 0, su.get("falhas") or 0), ""]
+    falhas = sorted([x for x in itens if x["sucesso"]["falhas"]], key=lambda x: -x["sucesso"]["falhas"])
+    L.append("FALHAS POR ESTAÇÃO" if falhas else "FALHAS POR ESTAÇÃO: nenhuma")
+    L += ["  - %s (%s): %d de %d execuções (%s OK)" % (nome(x), x["id"], x["sucesso"]["falhas"], x["sucesso"]["execucoes"], pct(x["sucesso"]["pct"])) for x in falhas]
+    agora_ruim = [x for x in itens if x["status"] == "error" or x.get("atrasado_s")]
+    L += ["", "AGORA EM FALHA OU ATRASADO" if agora_ruim else "AGORA EM FALHA OU ATRASADO: nenhum"]
+    L += ["  - %s (%s): %s" % (nome(x), x["id"], "em falha" if x["status"] == "error" else "atrasado") for x in agora_ruim]
+    man = [x for x in itens if x.get("manutencao")]
+    if man:
+        L += ["", "EM MANUTENÇÃO"] + ["  - %s (%s) até %s · %s" % (nome(x), x["id"], x["manutencao"]["ate"], x["manutencao"]["motivo"]) for x in man]
+    cons = sorted([x for x in s["agents"] if x.get("custo") and x["custo"]["execucoes"]], key=lambda x: (-x["custo"]["custo_usd"], -x["custo"]["tokens"]))[:8]
+    if cons:
+        L += ["", "CONSUMO POR AGENTE (estimado pelo Hermes)"]
+        L += ["  - %s: %s tokens · %d execução(ões)%s" % (nome(x), "{:,}".format(x["custo"]["tokens"]).replace(",", "."), x["custo"]["execucoes"],
+                                                        (" · US$ %.2f" % x["custo"]["custo_usd"]).replace(".", ",") if x["custo"]["custo_usd"] else "") for x in cons]
+        if k.get("custo_usd") is not None:
+            L.append("  Total: US$ %s" % ("%.2f" % k["custo_usd"]).replace(".", ","))
+    L += ["", "Abra a Sala neste Mac: %s" % ENDERECO_SALA, "Resumo automático do vigia da Sala (sem LLM), toda segunda-feira."]
+    return "[Sala] Resumo da semana: %s OK" % pct(su.get("pct")), "\n".join(L) + "\n"
+
+
+def enviar_resumo(cfg):
+    del server.SAUDE[:]
+    assunto, corpo = montar_resumo(server.estado(7))
+    return enviar(cfg, assunto, corpo) + (assunto,)
+
+
 def main(argv=()):
     if "--teste" in argv:
         cfg = config_email()
@@ -234,6 +281,14 @@ def main(argv=()):
         ok, msg = enviar(cfg, "[Sala] Teste do aviso por e-mail",
                          "Teste do vigia da Sala de Operações (%s).\nSe chegou, o aviso por e-mail está funcionando.\n" % datetime.now().strftime("%d/%m/%Y %H:%M"))
         print("e-mail de teste enviado para %s" % cfg["para"] if ok else "o e-mail de teste NÃO saiu (%s)" % msg)
+        return 0 if ok else 1
+    if "--resumo" in argv:
+        cfg = config_email()
+        if not cfg:
+            print("sem a chave alerta_email em %s: sem resumo" % server.CONFIG)
+            return 2
+        ok, msg, assunto = enviar_resumo(cfg)
+        print("resumo enviado: %s" % assunto if ok else "o resumo NÃO saiu (%s)" % msg)
         return 0 if ok else 1
     codigo = 0
     sinal_de_vida()
@@ -261,6 +316,19 @@ def main(argv=()):
         gravar_atomico(BASE, json.dumps(b, ensure_ascii=False))
         print("alerta: base inicial gravada (nenhum e-mail na primeira rodada)")
         return codigo
+    try:                                                   # resumo semanal (segunda, 8h): uma vez por semana
+        ultimo = server.ler_json(RESUMO).get("semana")
+    except Exception:
+        ultimo = None
+    if resumo_devido(datetime.now(), ultimo):
+        ok, msg, assunto = enviar_resumo(cfg)
+        if ok:
+            seg = datetime.now() - timedelta(days=datetime.now().weekday())
+            gravar_atomico(RESUMO, json.dumps({"semana": seg.strftime("%Y-%m-%d"), "enviado_em": time.time()}))
+            print("%s %s" % (datetime.now().strftime("%Y-%m-%d %H:%M"), assunto))
+        else:
+            print("resumo semanal NÃO saiu (%s); tento de novo na próxima rodada" % msg)
+            codigo = 1
     agora = time.time()
     ev, gravar = separar(eventos(a, b), a, b, agora)
     if ev:

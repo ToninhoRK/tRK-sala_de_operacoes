@@ -43,6 +43,8 @@ CONFIG = os.path.expanduser(os.environ.get("SALA_CONFIG", "~/.hermes/data/sala_c
 # Sinal de vida do vigia_sala.py (gravado no início de cada rodada): parado há mais de 15 min = fonte com problema
 VIGIA = os.environ.get("SALA_VIGIA") or os.path.join(HERMES, "data", "sala_vigia.json")
 VIGIA_ATRASO_S = 900
+# Pasta onde o Hermes procura os scripts dos jobs e os prompts dos agentes: arquivo que sumiu daqui = falha certa na próxima rodada
+SCRIPTS_DIR = os.path.join(HERMES, "scripts")
 PERIODOS = (7, 15, 30, 60, 90)   # dias dos indicadores (tendência, índice de sucesso, consumo), escolhidos no CONFIGURAR
 
 # Layout da planta: gerado a partir de layout.json (setores) + agentes.json. Nada de agente novo fica de fora:
@@ -480,6 +482,28 @@ def vigia_saude(agora_s):
         problema("vigia", "vigia da Sala: %s" % v["erro"])
 
 
+def arquivos_faltando(cat, jobs):
+    """Script de job, prompt de agente ou script de pós-validação que não existe mais: a próxima rodada vai falhar.
+    Acusa ANTES da falha (em 15/10/2026 uma sincronização apagou prompts e scripts e só se soube quando os jobs falharam).
+    Só confere numa instalação do Hermes (sem a pasta de scripts, como nos dados de exemplo, não confere nada)."""
+    if not os.path.isdir(SCRIPTS_DIR):
+        return
+    falta = []
+    for jb in jobs:
+        s = jb.get("script")
+        if s and jb.get("enabled", True) and not os.path.exists(os.path.join(SCRIPTS_DIR, os.path.basename(s))):
+            falta.append("script do job %s (%s)" % (jb.get("name"), os.path.basename(s)))
+    for nome, a in cat.items():
+        p = a.get("prompt")
+        if p and not os.path.exists(os.path.join(SCRIPTS_DIR, p)):
+            falta.append("prompt do agente %s (%s)" % (nome, p))
+        s = (a.get("pos_validacao") or {}).get("script")
+        if s and not os.path.exists(os.path.expanduser(s)):
+            falta.append("pós-validação do agente %s (%s)" % (nome, os.path.basename(s)))
+    if falta:
+        problema("arquivos", "%d arquivo(s) de agente/job sumiram (a próxima rodada vai falhar): %s" % (len(falta), "; ".join(falta)))
+
+
 def em_manutencao(janelas, t):
     return next((w for w in janelas if w[0] <= t <= w[1]), None)
 
@@ -499,6 +523,9 @@ def indice_sucesso(execs, janelas, corte):
     return {"execucoes": n, "falhas": f, "pct": round(100.0 * (n - f) / n, 1) if n else None, "manutencao": fora}
 
 
+CRON_JOBS_TODOS = []
+
+
 def cron_dados():
     jobs = []
     try:
@@ -507,6 +534,7 @@ def cron_dados():
     except Exception:
         problema("jobs.json", "jobs.json do cron ilegível: os jobs agendados não aparecem")
         return []
+    CRON_JOBS_TODOS[:] = jobs          # inclusive os ocultos: o script deles também precisa existir
     jobs = [x for x in jobs if x.get("name") not in JOBS_OCULTOS and not (x.get("name") or "").startswith("avulso-")]   # "avulso-*" = demandas pontuais fora do monitoramento
     execs = {}
     try:
@@ -922,6 +950,7 @@ def estado(dias=7):
         "eventos_executor": bool(exs),
     }
     vigia_saude(agora_s)
+    arquivos_faltando(cat, CRON_JOBS_TODOS)
     est_equipe, equipe = equipe_painel()
     layout, origem = montar_layout(cat, [c["id"] for c in crons], [p["id"] for p in est_equipe])
     jarvis = jarvis_estado()

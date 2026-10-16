@@ -30,7 +30,7 @@ class Base(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="sala_teste_")
         self.orig = {k: getattr(server, k) for k in ("AGENTES", "LOGS", "JOBS", "EXEC_DB", "STATE_DB", "EQUIPE_JSON",
                                                       "VAULT_CONT", "CLAUDE_USO", "rodando_agora", "sem_acao",
-                                                      "HIST_CRON", "MANUT", "CONFIG", "VIGIA", "acordou_ha", "chama_agente")}
+                                                      "HIST_CRON", "MANUT", "CONFIG", "VIGIA", "acordou_ha", "chama_agente", "SCRIPTS_DIR")}
         os.makedirs(os.path.join(self.tmp, "logs"))
         server.AGENTES = os.path.join(self.tmp, "agentes.json")
         server.LOGS = os.path.join(self.tmp, "logs")
@@ -45,6 +45,7 @@ class Base(unittest.TestCase):
         server.CONFIG = os.path.join(self.tmp, "sala_config.json")
         server.VIGIA = os.path.join(self.tmp, "sala_vigia.json")
         server.acordou_ha = lambda: None
+        server.SCRIPTS_DIR = os.path.join(self.tmp, "scripts")        # não existe: a checagem de arquivos fica desligada
         server._CUSTO.clear()
         server.rodando_agora = lambda: dict(self.rodando)
         server.sem_acao = lambda modelo, inicio: self.sem_acao
@@ -347,6 +348,21 @@ class Indicadores(Base):
         self.gravar(server.VIGIA, {"rodou_em": time.time(), "erro": "o último e-mail de aviso não saiu"})
         self.assertIn("vigia", f())
 
+    def test_arquivo_faltando_avisa_antes_da_falha(self):
+        os.makedirs(os.path.join(server.SCRIPTS_DIR, "agente_x"))
+        self.catalogo({"consulta_a": {"modelo": "m1", "prompt": "agente_x/prompt.md",
+                                      "pos_validacao": {"script": os.path.join(server.SCRIPTS_DIR, "valida.py")}}})
+        self.jobs([self.job("rotina", script="roda.py"), self.job("desligado", script="nao_existe.py", enabled=False),
+                   self.job("govti-vault-contagem", script="oculto.py")])
+        msg = lambda: " ".join(x["msg"] for x in self.estado()["saude"] if x["fonte"] == "arquivos")
+        m = msg()
+        for esperado in ("job rotina", "job govti-vault-contagem", "prompt do agente consulta_a", "pós-validação do agente consulta_a"):
+            self.assertIn(esperado, m)
+        self.assertNotIn("desligado", m)                                          # job desligado não roda: não acusa
+        for f in ("roda.py", "oculto.py", "valida.py", "agente_x/prompt.md"):
+            open(os.path.join(server.SCRIPTS_DIR, f), "w").close()
+        self.assertEqual(msg(), "")
+
     def test_responsavel(self):
         self.catalogo({"consulta_a": {"modelo": "m1", "responsavel": "Pessoa B"}, "consulta_b": {"modelo": "m2"}})
         self.jobs([self.job()])
@@ -374,7 +390,8 @@ class Vigia(Base):
             ("j-rotina", "completed", 1, iso(3600), iso(3500), None, iso(3600)),          # trabalhou 100 s
             ("j-rotina", "completed", 1, iso(1800), iso(1799.8), None, iso(1800)),        # só checou
             ("j-rotina", "failed", 1, iso(900), iso(899), "x", iso(900)),
-            ("j-apoio", "completed", 1, iso(600), iso(500), None, iso(600))])              # job oculto da Sala
+            ("j-apoio", "completed", 1, iso(600), iso(500), None, iso(600)),               # job oculto da Sala
+            ("j-sumiu", "failed", 1, iso(700), iso(690), "x", iso(700))])                  # job que não existe mais no jobs.json
         con.commit(); con.close()
         self.jobs([{"id": "j-rotina", "name": "rotina", "enabled": True, "schedule": {"expr": "0 * * * *"}, "script": "x.py",
                     "next_run_at": iso(-1800), "last_run_at": iso(900), "last_status": "ok"},
@@ -385,12 +402,15 @@ class Vigia(Base):
             f.write("#!/bin/sh\n[ -f %s/falhar ] && exit 1\necho '-----' >> %s\ncat >> %s\n" % (self.tmp, self.enviados, self.enviados))
         os.chmod(self.himalaya, 0o755)
         self.gravar(server.CONFIG, {"alerta_email": {"para": "alguem@exemplo.com", "de": "sala@exemplo.com", "himalaya": self.himalaya}})
+        hoje = datetime.now()
+        self.resumo = os.path.join(self.tmp, "resumo.json")                                # resumo desta semana já enviado
+        self.gravar(self.resumo, {"semana": (hoje - timedelta(days=hoje.weekday())).strftime("%Y-%m-%d")})
 
     def vigia(self):
         import subprocess
         env = dict(os.environ, HOME=self.tmp, SALA_AGENTES=server.AGENTES, SALA_JOBS=server.JOBS, SALA_HIST_CRON=server.HIST_CRON,
                    SALA_MANUT=server.MANUT, SALA_CONFIG=server.CONFIG, SALA_ALERTA_BASE=os.path.join(self.tmp, "base.json"),
-                   SALA_VIGIA=server.VIGIA)
+                   SALA_VIGIA=server.VIGIA, SALA_RESUMO=self.resumo)
         return subprocess.run([sys.executable, os.path.join(AQUI, "vigia_sala.py")], env=env, capture_output=True, text=True)
 
     def emails(self):
@@ -400,7 +420,9 @@ class Vigia(Base):
         r = self.vigia()
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         h = [json.loads(l) for l in open(server.HIST_CRON, encoding="utf8")]
-        self.assertEqual(sorted(x["status"] for x in h), ["completed", "failed"])   # sem a checagem de 0,2 s e sem o job oculto
+        self.assertEqual(sorted(x["status"] for x in h), ["completed", "failed"])   # sem a checagem de 0,2 s, o job oculto e o que sumiu
+        with open(server.HIST_CRON, "a", encoding="utf8") as f:                     # linha antiga de job que não existe mais: sai
+            f.write(json.dumps({"job_id": "j-sumiu", "job": "", "status": "failed", "started_at": iso(9000), "finished_at": iso(8990)}) + "\n")
         self.vigia()
         self.assertEqual(len(open(server.HIST_CRON, encoding="utf8").readlines()), 2)  # rodar de novo não duplica
         with open(server.HIST_CRON, "a", encoding="utf8") as f:                         # 120 dias atrás: descartada na próxima rodada
@@ -470,6 +492,30 @@ class Vigia(Base):
         self.vigia()
         self.assertIn("não saiu", json.load(open(server.VIGIA, encoding="utf8"))["erro"])
         self.assertIn("vigia", [x["fonte"] for x in self.estado()["saude"]])                    # a Sala acusa
+
+    def test_resumo_semanal(self):
+        import vigia_sala
+        d = lambda *a: datetime(*a)
+        # 19/10/2026 é segunda-feira
+        self.assertFalse(vigia_sala.resumo_devido(d(2026, 10, 19, 7, 59), "2026-10-12"))     # antes das 8h
+        self.assertTrue(vigia_sala.resumo_devido(d(2026, 10, 19, 8, 0), "2026-10-12"))
+        self.assertFalse(vigia_sala.resumo_devido(d(2026, 10, 19, 8, 5), "2026-10-19"))      # já saiu nesta semana
+        self.assertTrue(vigia_sala.resumo_devido(d(2026, 10, 21, 10, 0), "2026-10-12"))      # Mac desligado na segunda: sai na quarta
+        self.assertTrue(vigia_sala.resumo_devido(d(2026, 10, 21, 10, 0), None))
+        self.log("a", [(ts(3600), "consulta_a", "m1", 0, False), (ts(600), "consulta_a", "m1", 2, False)])
+        import subprocess
+        env = dict(os.environ, HOME=self.tmp, SALA_CONFIG=server.CONFIG, SALA_AGENTES=server.AGENTES, SALA_JOBS=server.JOBS)
+        r = subprocess.run([sys.executable, os.path.join(AQUI, "vigia_sala.py"), "--resumo"], env=env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        e = self.emails()[0]
+        self.assertIn("Subject: [Sala] Resumo da semana: 50,0% OK", e)
+        self.assertIn("consulta_a (consulta_a): 1 de 2", e)
+        self.assertNotIn("saída qualquer", e)
+        self.vigia()                                                                 # (base)
+        os.remove(self.resumo)                                                       # semana sem resumo: a rodada normal manda
+        self.vigia(); self.vigia()
+        self.assertEqual(len(self.emails()), 2)                                      # um só, mesmo rodando duas vezes
+        self.assertTrue(os.path.exists(self.resumo))
 
     def test_email_de_teste(self):
         import subprocess
