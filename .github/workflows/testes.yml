@@ -21,6 +21,21 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -W error::ResourceWarning testes_servidor.py
 
+  tela:
+    # parte visual num Chrome de verdade (planta, Modo TV, lista, manutenção, pixel art, 3D): sobreposições, erros de script, som
+    runs-on: ubuntu-latest
+    needs: servidor
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python testar_sala.py --rapido
+        env:
+          CHROME: /usr/bin/google-chrome
+          CHROME_EXTRA: --no-sandbox
+
   readmes:
     # README em português e em inglês com a mesma estrutura (títulos, capturas, tabelas, links, sumário)
     runs-on: ubuntu-latest

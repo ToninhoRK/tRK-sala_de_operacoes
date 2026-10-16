@@ -493,6 +493,22 @@ class Vigia(Base):
         self.assertIn("não saiu", json.load(open(server.VIGIA, encoding="utf8"))["erro"])
         self.assertIn("vigia", [x["fonte"] for x in self.estado()["saude"]])                    # a Sala acusa
 
+    def test_agendar_mac_simular(self):
+        import plistlib, subprocess
+        env = dict(os.environ, HOME=self.tmp, SALA_LAUNCHD_PREFIXO="sala.teste")
+        r = subprocess.run([sys.executable, os.path.join(AQUI, "agendar_mac.py"), "--simular", "--porta", "8799"],
+                           env=env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        docs = ["<?xml" + x for x in r.stdout.split("<?xml")[1:]]
+        p = [plistlib.loads(x.split("</plist>")[0].encode() + b"</plist>") for x in docs]
+        self.assertEqual([x["Label"] for x in p], ["sala.teste.servidor", "sala.teste.vigia"])
+        self.assertEqual(p[0]["ProgramArguments"][1:], [os.path.join(AQUI, "server.py"), "8799"])
+        self.assertTrue(p[0]["KeepAlive"])
+        self.assertEqual(p[1]["StartInterval"], 300)
+        self.assertEqual(os.path.realpath(p[1]["ProgramArguments"][0]), os.path.realpath(sys.executable))
+        self.assertTrue(p[1]["StandardErrorPath"].startswith(os.path.join(self.tmp, "Library", "Logs")))
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "Library", "LaunchAgents")))   # simular não grava
+
     def test_resumo_semanal(self):
         import vigia_sala
         d = lambda *a: datetime(*a)

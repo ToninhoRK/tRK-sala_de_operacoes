@@ -10,8 +10,8 @@
 
 ## Contents
 
-- [Four ways to see the same operation](#four-ways-to-see-the-same-operation)
-  - [Floor plan](#floor-plan-the-day-to-day) · [TV mode](#tv-mode-for-the-wall-of-the-room) · [3D](#3d-the-same-room-with-depth) · [Pixel art](#pixel-art-the-same-room-game-style)
+- [Five ways to see the same operation](#five-ways-to-see-the-same-operation)
+  - [Floor plan](#floor-plan-the-day-to-day) · [TV mode](#tv-mode-for-the-wall-of-the-room) · [3D](#3d-the-same-room-with-depth) · [Pixel art](#pixel-art-the-same-room-game-style) · [List](#list-everything-in-one-table)
 - [What you see at a glance](#what-you-see-at-a-glance)
 - [Highlights](#highlights)
 - [Requirements](#requirements)
@@ -25,7 +25,7 @@
 
 ---
 
-## Four ways to see the same operation
+## Five ways to see the same operation
 
 ### Floor plan: the day-to-day
 The full view for whoever follows things closely. Each room groups one kind of agent, and each desk shows the agent's name and state. Alongside you get the run history, the model used and the next scheduled run. Click a desk to see the details.
@@ -44,6 +44,11 @@ The same floor plan, now in real 3D, with volume, light and shadow. The angle, t
 The same floor plan redrawn in pixels, with an outline around every piece of furniture and hand-drawn employees wearing the same clothes and making the same gestures. Names and states stay sharp on top. Zoom into a room (mouse wheel or click its sign) to see every pixel. There is a TV version too.
 
 ![Pixel art theme: the same floor plan drawn in pixels](docs/sala-pixel.png)
+
+### List: everything in one table
+The **OFFICE | LISTA** switch swaps the floor plan for a table with every station: state, room, owner, last run, runs in the period, success rate and usage. Click a column title to sort, and use **EXPORTAR CSV** (export CSV) to take the numbers to a spreadsheet. A station under maintenance shows in lilac and raises no alarm.
+
+![List mode: table with owner, success rate, one station failing and another under maintenance](docs/sala-lista.png)
 
 ---
 
@@ -109,6 +114,8 @@ Open **http://127.0.0.1:8765** in your browser. To see every state in action, us
 
 With [Hermes](https://hermes-agent.nousresearch.com/docs) installed, its agents and scheduled jobs show up on their own. Without it, the room opens with the example agents in the `exemplo/` folder.
 
+To keep the room always on on a Mac, with the watcher every 5 minutes, run `python3 agendar_mac.py`: it creates and starts both launchd jobs with the right paths (`--simular` previews them, `--remover` undoes it).
+
 ## With Claude Code
 
 The room also follows **Claude Code** agents running headless (`claude -p`), started by hand or by any scheduler (cron, launchd, Windows Task Scheduler). `registrar_execucao.py` runs the command and records its start, end and result. The answer shows up in your terminal and is never stored.
@@ -149,7 +156,7 @@ python3 manutencao.py listar
 python3 manutencao.py encerrar rateio_mensal
 ```
 
-- **Watcher (e-mail alerts and long job history):** schedule `python3 vigia_sala.py` every 5 minutes (launchd, cron or Windows Task Scheduler). Without the `alerta_email` key in the config it only keeps the history; with it, it alerts a single address. The first run only records how things stand, with no e-mail.
+- **Watcher (e-mail alerts and long job history):** schedule `python3 vigia_sala.py` every 5 minutes: on a Mac, `python3 agendar_mac.py` does it for you; on Linux, cron; on Windows, Task Scheduler. Without the `alerta_email` key in the config it only keeps the history; with it, it alerts a single address. The first run only records how things stand, with no e-mail.
 - **For a TV:** open `/?tema=tv` (or `/?tema=pixeltv`, in pixel art) full screen; `&sala=<room id>` opens already zoomed into one room. If the TV has no keyboard or mouse, start Chrome with `--autoplay-policy=no-user-gesture-required` so sound plays without a click.
 
 ## Privacy and security

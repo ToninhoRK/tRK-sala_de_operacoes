@@ -1,5 +1,6 @@
 {
   "consulta_exemplo": {
+    "responsavel": "Analista Exemplo",
     "descricao": "Agente de consulta fictício (somente leitura)",
     "modelo": "modelo-exemplo",
     "provedor": "provedor-exemplo",
@@ -7,6 +8,7 @@
     "max_turns": 10
   },
   "rotina_exemplo": {
+    "responsavel": "Analista Exemplo",
     "descricao": "Agente de rotina fictício",
     "modelo": "modelo-exemplo",
     "provedor": "provedor-exemplo",
@@ -14,6 +16,7 @@
     "max_turns": 10
   },
   "auditoria_exemplo": {
+    "responsavel": "Equipe Exemplo",
     "descricao": "Agente de auditoria fictício",
     "modelo": "modelo-exemplo",
     "provedor": "provedor-exemplo",
@@ -21,6 +24,7 @@
     "max_turns": 10
   },
   "relatorio_exemplo": {
+    "responsavel": "Equipe Exemplo",
     "descricao": "Agente de relatório fictício",
     "modelo": "modelo-exemplo",
     "provedor": "provedor-exemplo",

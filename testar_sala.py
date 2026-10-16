@@ -14,12 +14,16 @@ Confere os contadores do diagnóstico (todos devem ser 0, inclusive SOM = autote
 Saída: tabela + código 0 (tudo ok) ou 1 (algum problema).
 
 Uso: python3 testar_sala.py [--rapido]      (--rapido: 1 semente e 5 min simulados por cenário)
-Precisa do Google Chrome (variável CHROME para outro caminho).
+Precisa do Google Chrome (variável CHROME para outro caminho; CHROME_EXTRA para opções a mais, ex. "--no-sandbox" no
+Linux do GitHub Actions, onde este teste roda a cada envio).
 """
 import os, pwd, re, sys, json, time, socket, shutil, tempfile, subprocess, urllib.request
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 CHROME = os.environ.get("CHROME", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+CHROME_EXTRA = os.environ.get("CHROME_EXTRA", "").split()
+# servidor de teste no Python do sistema quando houver (no Mac, o 3.9: o mais antigo suportado); senão, o que roda este teste
+PY_SERVIDOR = os.environ.get("SALA_PY") or ("/usr/bin/python3" if os.path.exists("/usr/bin/python3") else sys.executable)
 CONTADORES = ("OVERLAPS", "ESTANTE_INVASOES", "ERROS", "VIDRO", "PAREDE", "ATRAVESSA", "EMPILHADOS", "ORDEM", "SOM")
 RAPIDO = "--rapido" in sys.argv
 
@@ -31,7 +35,7 @@ def porta_livre():
 def subir(env_extra):
     porta = porta_livre()
     env = dict(os.environ, **env_extra)
-    proc = subprocess.Popen(["/usr/bin/python3", os.path.join(AQUI, "server.py"), str(porta)], cwd=AQUI, env=env,
+    proc = subprocess.Popen([PY_SERVIDOR, os.path.join(AQUI, "server.py"), str(porta)], cwd=AQUI, env=env,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(50):
         try:
@@ -45,7 +49,7 @@ FPS = {}
 
 
 def pagina(porta, consulta, perfil):
-    out = subprocess.run([CHROME, "--headless=new", "--disable-gpu", "--no-first-run", "--user-data-dir=" + perfil,
+    out = subprocess.run([CHROME] + CHROME_EXTRA + ["--headless=new", "--disable-gpu", "--no-first-run", "--user-data-dir=" + perfil,
                           "--window-size=1920,1080", "--virtual-time-budget=30000", "--dump-dom",
                           "http://127.0.0.1:%d/?%s" % (porta, consulta)], capture_output=True, text=True, timeout=240,
                          env=dict(os.environ, HOME=pwd.getpwuid(os.getuid()).pw_dir)).stdout   # Chrome sempre com o HOME real: com HOME vazio (teste "sem Hermes") ele trava ao abrir; o "sem Hermes" vale só para o servidor
@@ -92,7 +96,7 @@ def api(porta):
 def teste_pixel(porta, perfil):
     """Tema pixel art (/?tema=pixel&debug=1, com demonstração): a arte abre, cada estação e cada boneco da planta são desenhados,
     nenhum erro de script, o diagnóstico da planta continua zerado, e a pasta entre salas (primeiro fluxo do layout) é entregue."""
-    out = subprocess.run([CHROME, "--headless=new", "--no-first-run", "--user-data-dir=" + perfil + "px", "--window-size=1600,900",
+    out = subprocess.run([CHROME] + CHROME_EXTRA + ["--headless=new", "--no-first-run", "--user-data-dir=" + perfil + "px", "--window-size=1600,900",
                           "--virtual-time-budget=12000", "--dump-dom",
                           "http://127.0.0.1:%d/?tema=pixel&debug=1&demo=1&atrasado=1&seed=4&ff=30&testpasta=1" % porta],
                          capture_output=True, text=True, timeout=240, env=dict(os.environ, HOME=pwd.getpwuid(os.getuid()).pw_dir)).stdout
@@ -134,7 +138,7 @@ def teste_3d(porta, perfil):
         erros.append("3D: /3d falhou: %s" % e)
     m = None
     for tentativa in range(3):     # Three.js carregado em rede (import dinâmico): o headless às vezes salva a página antes; repete
-        out = subprocess.run([CHROME, "--headless=new", "--no-first-run", "--use-angle=swiftshader", "--enable-unsafe-swiftshader",
+        out = subprocess.run([CHROME] + CHROME_EXTRA + ["--headless=new", "--no-first-run", "--use-angle=swiftshader", "--enable-unsafe-swiftshader",
                               "--user-data-dir=" + perfil + "3d", "--window-size=1600,900", "--virtual-time-budget=15000", "--dump-dom",
                               "http://127.0.0.1:%d/?tema=3d&debug=1&demo=1&atrasado=1&seed=4&ff=30" % porta], capture_output=True, text=True, timeout=240,
                              env=dict(os.environ, HOME=pwd.getpwuid(os.getuid()).pw_dir)).stdout

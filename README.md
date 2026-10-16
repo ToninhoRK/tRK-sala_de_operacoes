@@ -10,8 +10,8 @@
 
 ## Sumário
 
-- [Quatro jeitos de ver a mesma operação](#quatro-jeitos-de-ver-a-mesma-operação)
-  - [Planta](#planta-o-dia-a-dia) · [Modo TV](#modo-tv-para-a-parede-da-sala) · [3D](#3d-a-mesma-sala-com-volume) · [Pixel art](#pixel-art-a-mesma-sala-com-cara-de-jogo)
+- [Cinco jeitos de ver a mesma operação](#cinco-jeitos-de-ver-a-mesma-operação)
+  - [Planta](#planta-o-dia-a-dia) · [Modo TV](#modo-tv-para-a-parede-da-sala) · [3D](#3d-a-mesma-sala-com-volume) · [Pixel art](#pixel-art-a-mesma-sala-com-cara-de-jogo) · [Lista](#lista-tudo-numa-tabela)
 - [O que você enxerga de relance](#o-que-você-enxerga-de-relance)
 - [Destaques](#destaques)
 - [Requisitos](#requisitos)
@@ -25,7 +25,7 @@
 
 ---
 
-## Quatro jeitos de ver a mesma operação
+## Cinco jeitos de ver a mesma operação
 
 ### Planta: o dia a dia
 A visão completa para quem acompanha de perto. Cada sala reúne um tipo de agente, e cada mesa mostra o nome do agente e o estado dele. Ao lado ficam o histórico de execuções, o modelo usado e a próxima rodada agendada. Clique numa mesa e veja os detalhes.
@@ -44,6 +44,11 @@ A mesma planta, agora em 3D de verdade, com volume, luz e sombra. O ângulo, os 
 A mesma planta redesenhada em pixels, com contorno em cada móvel e funcionários desenhados à mão, com as mesmas roupas e os mesmos gestos. Os nomes e os estados continuam nítidos por cima. Aproxime uma sala (roda do mouse ou clique na placa) para ver cada pixel. Também existe em versão para a TV.
 
 ![Tema pixel art: a mesma planta desenhada em pixels](docs/sala-pixel.png)
+
+### Lista: tudo numa tabela
+A chave **OFFICE | LISTA** troca a planta por uma tabela com todas as estações: estado, sala, responsável, última execução, execuções do período, índice de sucesso e consumo. Clique no título de uma coluna para ordenar e use **EXPORTAR CSV** para levar os números para a planilha. Uma estação em manutenção aparece em lilás e não dispara alarme.
+
+![Modo lista: tabela com responsável, índice de sucesso, uma estação em falha e outra em manutenção](docs/sala-lista.png)
 
 ---
 
@@ -109,6 +114,8 @@ Abra **http://127.0.0.1:8765** no navegador. Para ver todos os estados em ação
 
 Com o [Hermes](https://hermes-agent.nousresearch.com/docs) instalado, os agentes e as rotinas dele aparecem sozinhos. Sem ele, a sala abre com os agentes de exemplo da pasta `exemplo/`.
 
+Para deixar a sala sempre no ar no Mac, com o vigia a cada 5 minutos, rode `python3 agendar_mac.py`: ele cria e liga os dois agendamentos com os caminhos certos (`--simular` mostra antes, `--remover` desfaz).
+
 ## Com o Claude Code
 
 A sala também acompanha agentes do **Claude Code** rodando sem tela (`claude -p`), chamados à mão ou por qualquer agendador (cron, launchd, Agendador de Tarefas). O `registrar_execucao.py` roda o comando e registra início, fim e resultado. A resposta aparece no terminal e nunca é gravada.
@@ -149,7 +156,7 @@ python3 manutencao.py listar
 python3 manutencao.py encerrar rateio_mensal
 ```
 
-- **Vigia (aviso por e-mail e histórico longo dos jobs):** agende `python3 vigia_sala.py` a cada 5 minutos (launchd, cron ou Agendador de Tarefas). Sem a chave `alerta_email` na configuração, ele só guarda o histórico; com ela, avisa um único endereço. A primeira rodada só anota como as coisas estão, sem e-mail.
+- **Vigia (aviso por e-mail e histórico longo dos jobs):** agende `python3 vigia_sala.py` a cada 5 minutos: no Mac, `python3 agendar_mac.py` já faz isso; no Linux, cron; no Windows, Agendador de Tarefas. Sem a chave `alerta_email` na configuração, ele só guarda o histórico; com ela, avisa um único endereço. A primeira rodada só anota como as coisas estão, sem e-mail.
 - **Para uma TV:** abra `/?tema=tv` (ou `/?tema=pixeltv`, em pixel art) em tela cheia; `&sala=<id da sala>` abre já aproximado numa sala. Se a TV não tiver teclado nem mouse, inicie o Chrome com `--autoplay-policy=no-user-gesture-required` para o som tocar sem precisar de clique.
 
 ## Privacidade e segurança
