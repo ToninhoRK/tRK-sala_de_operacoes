@@ -104,6 +104,8 @@ function jobsAutoteste(){
   if(b){b.click();const a1=[...J.querySelectorAll('.jtab td.nm')].map(t=>t.textContent);J.querySelector('.jtab th button[data-k="nome"]').click();const a2=[...J.querySelectorAll('.jtab td.nm')].map(t=>t.textContent);
     const o=[...a1].sort((x,y)=>x.localeCompare(y,LOCALE)).join('|'), oi=[...a1].sort((x,y)=>y.localeCompare(x,LOCALE)).join('|');   // os dois cliques: uma ordem e a oposta
     if(!((a1.join('|')===o&&a2.join('|')===oi)||(a1.join('|')===oi&&a2.join('|')===o)))r.push('JOBS: ordenar pela coluna Job não ordenou')}
+  if(!(typeof CFG!=='undefined'&&CFG.nomes==='tecnicos'))J.querySelectorAll('.jtab td.nm').forEach(t=>{const w=t.textContent.split(' ').filter((x,i)=>!(i&&JMIN.test(x))).find(x=>x&&x.charAt(0)!==x.charAt(0).toLocaleUpperCase(LOCALE));
+    if(w)r.push('JOBS: nome sem inicial maiúscula: '+t.textContent)});
   const csv=csvJobs(STATE).split('\r\n').filter(Boolean);
   if(csv.length!==n+1)r.push('JOBS CSV: '+(csv.length-1)+' linhas para '+n+' jobs');
   JSORT=sort; visaoLigar(antes);
@@ -116,7 +118,7 @@ function jobsAutoteste(){
 function idiomaAutoteste(){
   if(!EN||!STATE||typeof visaoLigar!=='function')return [];
   const dados=new Set(), add=v=>{if(v&&typeof v==='string'&&v.length>1){dados.add(v);dados.add(v.toUpperCase())}};
-  all().forEach(it=>{[label(it.id),it.id,it.name,it.desc,it.responsavel,it.model,it.provider,it.schedule,it.source,it.setor,it.manutencao&&it.manutencao.motivo].forEach(add);(it.skills||[]).forEach(add)});
+  all().forEach(it=>{[label(it.id),typeof jNome==='function'?jNome(it.id):'',it.id,it.name,it.desc,it.responsavel,it.model,it.provider,it.schedule,it.source,it.setor,it.manutencao&&it.manutencao.motivo].forEach(add);(it.skills||[]).forEach(add)});
   ((STATE.layout||{}).zones||[]).forEach(z=>add(z.title)); (STATE.sem_setor||[]).forEach(add);
   const vt=STATE.vault||{}; Object.keys(vt.por_tipo||{}).forEach(add); Object.keys((vt.auditoria||{}).categorias||{}).forEach(add);
   (STATE.feed||[]).forEach(e=>add(e.model));

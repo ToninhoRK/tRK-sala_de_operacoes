@@ -23,10 +23,16 @@ function jHorarios(ds){
   const p=ds[1]-ds[0], reg=ds.every((d,i)=>!i||d-ds[i-1]===p);
   return jHora(ds[0])+(reg?'–':' … ')+jHora(ds[ds.length-1])+' · '+ds.length+'×';
 }
+// Nome do job na tela JOBS com a inicial de cada palavra em maiúscula ("Job auditoria vault" -> "Job Auditoria Vault"; 16/10/2026).
+// Siglas e maiúsculas do meio ficam (RH, O365, GitHub); conectivos (de, da, do, e...) ficam minúsculos
+// fora da 1ª palavra. Com os nomes técnicos (CONFIGURAR) mostra o id como está.
+const JMIN=/^(a|o|as|os|e|de|da|do|das|dos|em|na|no|nas|nos|para|por|com)$/i;
+function jNome(id){const n=label(id);if(typeof CFG!=='undefined'&&CFG.nomes==='tecnicos')return n;
+  return n.split(' ').map((w,i)=>i&&JMIN.test(w)?w.toLowerCase():w.charAt(0).toLocaleUpperCase(LOCALE)+w.slice(1)).join(' ')}
 function jobsDados(s){
   return (s.crons||[]).map(c=>{const su=c.sucesso||{}, du=c.duracao||{};
     const prox=(c.proximas||[]).map(([t,m])=>({d:parseTs(t+':00'),m})).filter(x=>x.d&&!isNaN(x.d));
-    return {c,nome:label(c.id),est:estOrd(c),prox,prox0:prox.length?+prox[0].d:Infinity,ult:(c.last_run||'').replace('T',' ').slice(0,19),
+    return {c,nome:jNome(c.id),est:estOrd(c),prox,prox0:prox.length?+prox[0].d:Infinity,ult:(c.last_run||'').replace('T',' ').slice(0,19),
       ag:(EN?c.agenda_en:c.agenda_texto)||c.agenda_texto||c.schedule||'',resp:c.responsavel||'',ex:su.execucoes||0,fa:su.falhas||0,suc:su.pct??-1,
       dm:du.media_s??-1,dx:du.max_s??-1}});
 }
