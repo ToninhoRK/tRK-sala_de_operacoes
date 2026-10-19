@@ -509,6 +509,22 @@ class Vigia(Base):
         self.vigia()
         self.assertEqual(len(open(server.HIST_CRON, encoding="utf8").readlines()), 2)
 
+    def test_historico_guarda_a_recuperacao(self):
+        """Falha e volta em menos de 5 s: só a 1ª boa depois da falha entra no histórico (as checagens seguintes não)."""
+        import sqlite3
+        con = sqlite3.connect(server.EXEC_DB)
+        con.executemany("insert into executions values (?,?,?,?,?,?,?)", [
+            ("j-rotina", "completed", 1, iso(300), iso(297), None, iso(300)),             # 1ª boa depois da falha de iso(900): entra
+            ("j-rotina", "completed", 1, iso(100), iso(97), None, iso(100))])             # checagem rápida seguinte: fica de fora
+        con.commit(); con.close()
+        r = self.vigia()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        h = [json.loads(l) for l in open(server.HIST_CRON, encoding="utf8")]
+        curtas = [x for x in h if x["status"] == "completed" and server.dur(x) < 5]
+        self.assertEqual(len(curtas), 1)
+        self.assertAlmostEqual(time.time() - server.iso_epoch(curtas[0]["started_at"]), 300, delta=5)   # a de iso(300), não a de iso(100)
+        self.assertEqual(len(h), 3)
+
     def test_alerta_por_email(self):
         self.log("a", [(ts(3600), "consulta_a", "m1", 0, False)])
         r = self.vigia()
@@ -696,6 +712,29 @@ class Servidor(Base):
         with urllib.request.urlopen(self.url + "/api/atividade?agent=../../etc", timeout=5) as r:
             corpo = r.read().decode()
         self.assertIn("desconhecido", corpo)
+
+
+class Recuperacao(Base):
+    def test_marca_so_a_primeira_boa_depois_da_falha(self):
+        ex = [{"status": "completed", "started_at": iso(50), "finished_at": iso(48)},
+              {"status": "completed", "started_at": iso(100), "finished_at": iso(98)},       # recuperou
+              {"status": "failed", "started_at": iso(200), "finished_at": iso(198)},
+              {"status": "completed", "started_at": iso(300), "finished_at": iso(298)},      # antes da falha: nada
+              {"status": "running", "started_at": iso(10), "finished_at": None}]
+        server.marcar_recuperacao(ex)
+        self.assertEqual([bool(e.get("recuperacao")) for e in ex], [False, True, False, False, False])
+        self.assertTrue(server.trabalhou(ex[1]) and server.trabalhou(ex[2]))
+        self.assertFalse(server.trabalhou(ex[0]) or server.trabalhou(ex[3]))
+
+    def test_job_que_falhou_e_voltou_rapido_mostra_a_boa_como_ultima(self):
+        self.jobs([{"id": "j-sync", "name": "sync", "enabled": True, "schedule": {"expr": "0 * * * *"}, "script": "x.py",
+                    "next_run_at": iso(-1800), "last_run_at": iso(50), "last_status": "ok"}])
+        with open(server.HIST_CRON, "w", encoding="utf8") as f:      # falhou, voltou em 3 s
+            for st, ini_s, dur_s in (("failed", 900, 2), ("completed", 300, 3)):
+                f.write(json.dumps({"job_id": "j-sync", "job": "", "status": st, "started_at": iso(ini_s), "finished_at": iso(ini_s - dur_s)}) + "\n")
+        s = self.estado()
+        feed = [e for e in s["feed"] if e["agent"] == "cron:sync"]
+        self.assertEqual([e["status"] for e in feed][:2], ["ok", "error"])
 
 
 if __name__ == "__main__":

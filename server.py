@@ -35,7 +35,7 @@ if not os.path.exists(AGENTES):
 if not os.path.exists(JOBS):
     JOBS = os.path.join(EXEMPLO, "cron_jobs.json")
 # Histórico próprio da Sala para os jobs: o executions.db do Hermes guarda só as últimas ~1000 execuções (uns 2 dias, com os
-# jobs de 5 em 5 min). Gravado pelo vigia_sala.py a cada 5 min: só execuções que trabalharam (> 5 s) ou falharam, até 100 dias.
+# jobs de 5 em 5 min). Gravado pelo vigia_sala.py a cada 5 min: só execuções que trabalharam (> 5 s), falharam ou recuperaram o job depois de uma falha, até 100 dias.
 HIST_CRON = os.environ.get("SALA_HIST_CRON") or os.path.join(HERMES, "data", "sala_historico_cron.jsonl")
 # Janelas de manutenção (manutencao.py): dentro da janela, falha e atraso não alarmam e não contam no índice de sucesso.
 MANUT = os.environ.get("SALA_MANUT") or os.path.join(HERMES, "data", "sala_manutencao.json")
@@ -372,7 +372,7 @@ def tendencia(hist, crons_execs, dias=7):
     for cid, ex in crons_execs:
         for e in ex:
             d = (e.get("started_at") or "")[:10]
-            if d in tot and (e["status"] == "failed" or dur(e) > 5):
+            if d in tot and trabalhou(e):
                 f = e["status"] == "failed"
                 tot[d][0] += 1; tot[d][1] += f
                 p = por.setdefault(cid, {x: [0, 0] for x in ds}); p[d][0] += 1; p[d][1] += f
@@ -688,6 +688,8 @@ def cron_dados():
         if novos:
             execs.setdefault(jid, []).extend(novos)
             execs[jid].sort(key=lambda e: e.get("started_at") or "9999", reverse=True)   # sem início (só reivindicada) = a mais nova
+    for lst in execs.values():
+        marcar_recuperacao(lst)
     saida = []
     hoje = datetime.now().strftime("%Y-%m-%d")
     for jb in jobs:
@@ -708,7 +710,7 @@ def cron_dados():
             "checks_today": sum(1 for e in ex if (e.get("started_at") or "").startswith(hoje)),
             "failed_today": sum(1 for e in ex if (e.get("started_at") or "").startswith(hoje) and e["status"] == "failed"),
             "last_exec_status": ultimo["status"] if ultimo else None,
-            "work_today": sum(1 for e in ex if (e.get("started_at") or "").startswith(hoje) and (e["status"] == "failed" or dur(e) > 5)),
+            "work_today": sum(1 for e in ex if (e.get("started_at") or "").startswith(hoje) and trabalhou(e)),
             "chama_agente": chama_agente(jb.get("script")),
             "_execs": ex,
         })
@@ -791,6 +793,24 @@ def dur(e):
         return (b - a).total_seconds()
     except Exception:
         return 0
+
+
+def marcar_recuperacao(ex):
+    """Marca com e[\"recuperacao\"]=True a 1ª execução concluída com sucesso depois de uma falha do mesmo job (qualquer duração).
+    Sem isso, o job que falha e volta em menos de 5 s (envio ao GitHub sem novidade, por exemplo) deixava a falha como o último
+    registro visível: a execução boa e curta nunca entrava no feed, na JOBS nem no histórico. Só essa execução entra; as
+    checagens rápidas seguintes continuam de fora."""
+    anterior = None
+    for e in sorted((x for x in ex if x.get("started_at") and x.get("status") not in ("running", "claimed")),
+                    key=lambda x: x["started_at"]):
+        if e["status"] != "failed" and anterior == "failed":
+            e["recuperacao"] = True
+        anterior = e["status"]
+
+
+def trabalhou(e):
+    """Execução que conta no feed, na tendência, no índice de sucesso e na JOBS: falhou, durou mais de 5 s ou é a que recuperou o job."""
+    return e["status"] == "failed" or dur(e) > 5 or bool(e.get("recuperacao"))
 
 
 CLAUDE_USO = os.path.join(HERMES, "data", "claude_uso.json")   # gravado pelo statusLine do Claude Code (claude_statusline.py)
@@ -984,7 +1004,7 @@ def estado(dias=7):
             c["status"] = "ok"
         # checagens de 0,2s (o job só verifica se é hora) não entram no feed; só as que trabalharam ou falharam
         for e in ex[:100]:
-            if e["status"] == "failed" or dur(e) > 5:
+            if trabalhou(e):
                 concluidos.append({"ts": (e["started_at"] or "")[:19].replace("T", " "), "agent": c["id"], "type": "cron",
                                    "model": None, "code": 1 if e["status"] == "failed" else 0, "fallback": False,
                                     "name": c["id"], "status": "error" if e["status"] == "failed" else "ok",
@@ -1028,7 +1048,7 @@ def estado(dias=7):
     # índice de sucesso no período (fora das janelas de manutenção): agentes pelo log; jobs pelas execuções que trabalharam ou falharam
     corte = agora_s - dias * 86400
     trab = {cid: [(iso_epoch(e["started_at"]), e["status"] == "failed", iso_epoch(e.get("finished_at"))) for e in ex
-                  if e.get("started_at") and (e["status"] == "failed" or dur(e) > 5)] for cid, ex in execs_cron}
+                  if e.get("started_at") and trabalhou(e)] for cid, ex in execs_cron}
     ep = lambda e: time.mktime(time.strptime(e["ts"], "%Y-%m-%d %H:%M:%S"))
     for a in agentes:
         execs = [(ep(e), e["code"] != 0) for e in por.get(a["id"], [])]

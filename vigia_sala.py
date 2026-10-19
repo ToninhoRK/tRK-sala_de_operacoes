@@ -2,7 +2,7 @@
 """Vigia da Sala de Operações: roda a cada 5 min (LaunchAgent ai.hermes.sala-vigia), sem LLM e sem navegador.
 
 1. Histórico próprio dos jobs. O executions.db do Hermes guarda só as últimas ~1000 execuções (uns 2 dias com jobs de 5 em
-   5 min). O vigia copia as execuções terminadas que trabalharam (> 5 s) ou falharam para
+   5 min). O vigia copia as execuções terminadas que trabalharam (> 5 s), falharam ou recuperaram o job (1ª boa depois de falha) para
    ~/.hermes/data/sala_historico_cron.jsonl (só id e nome do job, estado, início e fim; guarda 100 dias). É o que dá à Sala os
    períodos de 15 a 90 dias para os jobs. Jobs ocultos da Sala (apoio dela própria e avulso-*) ficam de fora.
 2. Alerta por e-mail (opcional: chave "alerta_email" do sala_config.json; sem ela, só o histórico). Compara o estado da Sala
@@ -83,13 +83,19 @@ def coletar_historico():
                     continue
     except FileNotFoundError:
         pass
+    por_job = {}
+    for jid, st, ini, fim in linhas_db:
+        por_job.setdefault(jid, []).append({"status": st, "started_at": ini, "finished_at": fim})
+    for lst in por_job.values():
+        server.marcar_recuperacao(lst)
+    recuperou = {(jid, e["started_at"]) for jid, lst in por_job.items() for e in lst if e.get("recuperacao")}
     novos = []
     for jid, st, ini, fim in linhas_db:
         nome = nomes.get(jid, "")
         if (jid, ini) in chaves or nome in server.JOBS_OCULTOS or nome.startswith("avulso-") or (nomes and jid not in nomes):
             continue                                       # job que não existe mais no jobs.json: a Sala nunca o mostra
         e = {"job_id": jid, "job": nome, "status": st, "started_at": ini, "finished_at": fim}
-        if st == "failed" or server.dur(e) > 5:
+        if st == "failed" or server.dur(e) > 5 or (jid, ini) in recuperou:   # recuperou = 1ª boa depois de falha, mesmo curta
             novos.append(e)
             chaves.add((jid, ini))
     corte = time.time() - GUARDA_DIAS * 86400
