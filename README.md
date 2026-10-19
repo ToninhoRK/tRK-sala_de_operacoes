@@ -153,6 +153,7 @@ Sem o Hermes, funcionam igual: estação, estado, histórico, duração, falhas,
 - **Salas e agentes:** em `layout.json` você define as salas e quem senta em cada uma, por nome ou por prefixo (por exemplo, todo `consulta_*` vai para CONSULTAS), e os nomes amigáveis de cada estação.
 - **Rotinas com prazo:** os jobs agendados já trazem a própria agenda. Para um agente que deve rodar com certa frequência, acrescente `"cadencia_h": 24` na entrada dele (e `"cadencia_dias_uteis": true` para não contar o fim de semana): passou de 1,2× esse intervalo sem rodar, ele aparece como atrasado.
 - **Integrações:** a fila da equipe no Agidesk e a contagem de notas de um vault do Obsidian são configuradas num arquivo local (veja `config.exemplo.json`). A chave de acesso fica no Keychain do macOS, nunca no código.
+- **Aviso de versão nova:** a sala tem um número de versão (arquivo `VERSION`). A cada 2 horas ela confere o `VERSION` publicado aqui no GitHub e, se houver um maior que o seu, mostra uma tarja amarela no topo. Para desligar, `"verificar_atualizacao": false` no arquivo local de configuração.
 - **Responsável:** `"responsavel_padrao"` no arquivo local de configuração vale para todas as estações; `"responsavel"` na entrada de um agente no `agentes.json` vale só para ele.
 - **Janela de manutenção:** pelo `manutencao.py` (a estação é o nome do agente ou `cron:<nome do job>`):
 
@@ -169,6 +170,7 @@ python3 manutencao.py encerrar rateio_mensal
 
 - **Roda só no seu computador:** o servidor só aceita conexões do próprio computador (`127.0.0.1`).
 - **Sites de fora não leem a sala:** pedidos com endereço diferente de `127.0.0.1` ou `localhost` são recusados, então uma página maliciosa aberta no navegador não consegue ler os dados da sala.
+- **Uma única conexão de saída, que você pode desligar:** a cada 2 horas o servidor lê o arquivo `VERSION` público deste repositório para avisar de versão nova. Não envia nenhum dado seu (o GitHub só vê o endereço de rede). Com `"verificar_atualizacao": false` no arquivo local de configuração, a sala não fala com a internet.
 - **Somente leitura:** a sala só observa os agentes, nunca dispara nem altera nada. O vigia opcional só grava o histórico da própria sala e manda o e-mail de aviso.
 - **Zero tokens:** a sala não usa modelo de I.A. e só lê históricos e arquivos de estado.
 - **O conteúdo fica onde está:** o navegador recebe nome do agente, horário, modelo e resultado. Perguntas e respostas dos agentes nunca saem do lugar onde estão.

@@ -59,6 +59,8 @@ function update(s){
   const nt=$('notice'),ss=s.sem_setor||[],sd=s.saude||[], msgs=[];
   if(sd.length)msgs.push(T('⚠ Fonte de dados com problema: ','⚠ Data source with a problem: ')+sd.map(x=>EN&&x.msg_en||x.msg).join(' · '));
   if(ss.length)msgs.push(T('⚠ '+ss.length+' agente(s) sem setor definido, colocado(s) em NOVOS AGENTES: ','⚠ '+ss.length+' agent(s) with no sector, placed in NOVOS AGENTES: ')+ss.join(', ')+T('. Para escolher a sala: campo "setor" no agentes.json ou layout.json.','. To choose the room: the "setor" field in agentes.json or layout.json.'));
+  const av=s.atualizacao;    // tarja de versão nova: só aviso (sem som, e-mail nem veredito)
+  if(av&&av.nova)msgs.push(T('⚠ Há uma versão nova da Sala ('+av.remota+'; a sua é '+av.local+'): '+av.repo,'⚠ A new version of the room is available ('+av.remota+'; yours is '+av.local+'): '+av.repo));
   nt.style.display=msgs.length?'block':'none'; nt.textContent=msgs.join('\n'); nt.style.whiteSpace='pre-line';
   if(CFG.anim==='desligada')parado();
 }

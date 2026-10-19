@@ -34,7 +34,7 @@ def porta_livre():
 
 def subir(env_extra):
     porta = porta_livre()
-    env = dict(os.environ, **env_extra)
+    env = {**os.environ, "SALA_VERSAO_REMOTA": "", **env_extra}     # sem rede nos testes; o caso da tarja de versão passa a sua
     proc = subprocess.Popen([PY_SERVIDOR, os.path.join(AQUI, "server.py"), str(porta)], cwd=AQUI, env=env,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(50):
@@ -270,6 +270,23 @@ def main():
                 proc.kill()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+    # tarja de versão nova: com uma versão maior no "GitHub" (variável de teste) a página mostra o aviso; sem ela, não
+    for remota, quer in (("99.0.0", True), ("", False)):
+        proc, porta = subir({"SALA_VERSAO_REMOTA": remota})
+        try:
+            erros, d = api(porta)
+            falhas += ["API (versão): " + e for e in erros]
+            if bool((d.get("atualizacao") or {}).get("nova")) != quer:
+                falhas.append("versão: atualizacao.nova deveria ser %s (remota %r): %s" % (quer, remota, d.get("atualizacao")))
+            dom = subprocess.run([CHROME] + CHROME_EXTRA + ["--headless=new", "--disable-gpu", "--no-first-run", "--user-data-dir=" + perfil,
+                                  "--window-size=1920,1080", "--virtual-time-budget=8000", "--dump-dom", "http://127.0.0.1:%d/?lang=pt" % porta],
+                                 capture_output=True, text=True, timeout=240, env=dict(os.environ, HOME=pwd.getpwuid(os.getuid()).pw_dir)).stdout
+            m = re.search(r'<div[^>]*id="notice"[^>]*>(.*?)</div>', dom, re.S)
+            visivel = bool(m and "versão nova" in m.group(1) and "display: none" not in m.group(0).split(">")[0])
+            if visivel != quer:
+                falhas.append("versão: tarja %s na página (remota %r)" % ("apareceu" if visivel else "não apareceu", remota))
+        finally:
+            proc.kill()
     larg = max(len(l[0]) for l in linhas)
     print("%-*s  %s" % (larg, "caso", "  ".join(c[:6] for c in CONTADORES)))
     for l in linhas:

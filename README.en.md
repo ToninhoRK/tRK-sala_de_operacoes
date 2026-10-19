@@ -153,6 +153,7 @@ Without Hermes, these work the same: station, state, history, duration, failures
 - **Rooms and agents:** in `layout.json` you define the rooms and who sits in each one, by name or by prefix (for example, every `consulta_*` goes to CONSULTAS), plus each station's friendly name.
 - **Jobs with a deadline:** scheduled jobs already carry their own schedule. For an agent that should run at a certain frequency, add `"cadencia_h": 24` to its entry (and `"cadencia_dias_uteis": true` to skip weekends): once it goes 1.2× that interval without running, it shows up as late.
 - **Integrations:** the team queue in Agidesk and the note count of an Obsidian vault are set up in a local file (see `config.exemplo.json`). The access key lives in the macOS Keychain, never in the code.
+- **New-version notice:** the room has a version number (the `VERSION` file). Every 2 hours it checks the `VERSION` published here on GitHub and, if it is higher than yours, shows a yellow banner at the top. To turn it off, set `"verificar_atualizacao": false` in the local config file.
 - **Owner:** `"responsavel_padrao"` in the local config file applies to every station; `"responsavel"` in an agent's entry in `agentes.json` applies to that agent only.
 - **Maintenance window:** with `manutencao.py` (the station is the agent's name or `cron:<job name>`):
 
@@ -169,6 +170,7 @@ python3 manutencao.py encerrar rateio_mensal
 
 - **Runs on your computer only:** the server only accepts connections from the computer itself (`127.0.0.1`).
 - **Outside websites can't read the room:** requests addressed to anything other than `127.0.0.1` or `localhost` are refused, so a malicious page open in your browser cannot read the room's data.
+- **One outgoing connection, which you can turn off:** every 2 hours the server reads this repository's public `VERSION` file to warn about a new version. It sends none of your data (GitHub only sees the network address). With `"verificar_atualizacao": false` in the local config file, the room does not talk to the internet.
 - **Read-only:** the room only watches the agents; it never triggers or changes anything. The optional watcher only writes the room's own history and sends the alert e-mail.
 - **Zero tokens:** the room uses no AI model and only reads histories and state files.
 - **Content stays where it is:** the browser receives the agent's name, time, model and result. The agents' questions and answers never leave where they are.

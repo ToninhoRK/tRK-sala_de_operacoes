@@ -338,7 +338,7 @@ class Indicadores(Base):
         self.assertEqual(c["intervalo"]["agenda_texto"], "a cada 2 h")             # agendamento que não é cron: texto do jobs.json
         self.assertEqual(len(c["intervalo"]["proximas"]), 1)                       # e a próxima do jobs.json
         self.assertEqual(s["kpis"]["jobs_dados_desde"], (agora - timedelta(days=3)).strftime("%Y-%m-%d"))
-        self.assertEqual(s["versao"], 4)
+        self.assertEqual(s["versao"], 5)
 
     def test_periodo_e_indice_de_sucesso(self):
         self.log("a", [(ts(40 * 86400), "consulta_a", "m1", 0, False), (ts(10 * 86400), "consulta_a", "m1", 1, False),
@@ -735,6 +735,94 @@ class Recuperacao(Base):
         s = self.estado()
         feed = [e for e in s["feed"] if e["agent"] == "cron:sync"]
         self.assertEqual([e["status"] for e in feed][:2], ["ok", "error"])
+
+
+class AvisoDeVersao(Base):
+    """Tarja de versão nova: compara número (não texto), respeita a chave de desligar e nunca vai à rede fora do servidor."""
+
+    def setUp(self):
+        super().setUp()
+        self.chaves = {k: getattr(server, k) for k in ("_buscar_versao_remota", "BUSCAR_VERSAO", "AQUI")}
+        self.vdir = os.path.join(self.tmp, "sala")
+        os.makedirs(self.vdir)
+        server.AQUI = self.vdir
+        self.escrever_versao("1.9.0")
+        server._VERSAO.update({"remota": None, "proxima": 0.0, "buscando": False, "checado_em": None})
+        self.buscas = []
+        server._buscar_versao_remota = lambda: (self.buscas.append(1), self.resposta)[1]
+        self.resposta = "1.10.0"
+        os.environ.pop("SALA_VERSAO_REMOTA", None)
+
+    def tearDown(self):
+        for k, v in self.chaves.items():
+            setattr(server, k, v)
+        os.environ.pop("SALA_VERSAO_REMOTA", None)
+        super().tearDown()
+
+    def escrever_versao(self, v):
+        with open(os.path.join(self.vdir, "VERSION"), "w") as f:
+            f.write(v + "\n")
+
+    def test_compara_numero_e_nao_texto(self):
+        server.BUSCAR_VERSAO = True
+        a = server.atualizacao_info(_sincrono=True)
+        self.assertTrue(a["nova"])                                   # 1.10.0 > 1.9.0 (como texto seria menor)
+        self.assertEqual((a["local"], a["remota"]), ("1.9.0", "1.10.0"))
+
+    def test_igual_ou_menor_nao_avisa(self):
+        server.BUSCAR_VERSAO = True
+        for local in ("1.10.0", "2.0.0"):
+            self.escrever_versao(local)
+            server._VERSAO.update({"remota": None, "proxima": 0.0})
+            self.assertFalse(server.atualizacao_info(_sincrono=True)["nova"], local)
+
+    def test_resposta_estranha_ou_sem_rede_nao_avisa_e_tenta_em_30_min(self):
+        server.BUSCAR_VERSAO = True
+        self.resposta = None
+        a = server.atualizacao_info(_sincrono=True)
+        self.assertFalse(a["nova"]); self.assertIsNone(a["remota"])
+        self.assertAlmostEqual(server._VERSAO["proxima"] - time.time(), server.VERSAO_RETENTA_S, delta=5)
+        self.assertEqual(server._versao_num("1.2"), None); self.assertEqual(server._versao_num("<html>"), None)
+
+    def test_busca_so_de_2_em_2_horas(self):
+        server.BUSCAR_VERSAO = True
+        server.atualizacao_info(_sincrono=True); server.atualizacao_info(_sincrono=True); server.atualizacao_info(_sincrono=True)
+        self.assertEqual(len(self.buscas), 1)
+        self.assertAlmostEqual(server._VERSAO["proxima"] - time.time(), server.VERSAO_CHECA_S, delta=5)
+        server._VERSAO["proxima"] = time.time() - 1                  # passou o prazo
+        server.atualizacao_info(_sincrono=True)
+        self.assertEqual(len(self.buscas), 2)
+
+    def test_chave_desliga_a_verificacao(self):
+        server.BUSCAR_VERSAO = True
+        self.gravar(server.CONFIG, {"verificar_atualizacao": False})
+        a = server.atualizacao_info(_sincrono=True)
+        self.assertEqual(self.buscas, []); self.assertFalse(a["nova"])
+        self.gravar(server.CONFIG, {"verificar_atualizacao": True})
+        self.assertTrue(server.atualizacao_info(_sincrono=True)["nova"])
+
+    def test_fora_do_servidor_nunca_vai_a_rede(self):
+        server.BUSCAR_VERSAO = False                                 # vigia, testes e quem importa o módulo
+        a = server.atualizacao_info(_sincrono=True)
+        self.assertEqual(self.buscas, []); self.assertFalse(a["nova"])
+
+    def test_sem_arquivo_version_nao_ha_aviso(self):
+        os.remove(os.path.join(self.vdir, "VERSION"))
+        server.BUSCAR_VERSAO = True
+        self.assertIsNone(server.atualizacao_info(_sincrono=True)); self.assertEqual(self.buscas, [])
+        self.assertIsNone(self.estado()["atualizacao"])
+
+    def test_variavel_de_teste_dispensa_a_rede_e_chega_ao_estado(self):
+        server.BUSCAR_VERSAO = True
+        os.environ["SALA_VERSAO_REMOTA"] = "9.0.0"
+        a = self.estado()["atualizacao"]
+        self.assertTrue(a["nova"]); self.assertEqual(self.buscas, [])
+        os.environ["SALA_VERSAO_REMOTA"] = ""
+        self.assertFalse(self.estado()["atualizacao"]["nova"])
+
+    def test_o_version_do_repositorio_e_valido(self):
+        v = open(os.path.join(self.chaves["AQUI"], "VERSION"), encoding="utf8").read().strip()
+        self.assertTrue(server._versao_num(v), v)
 
 
 if __name__ == "__main__":

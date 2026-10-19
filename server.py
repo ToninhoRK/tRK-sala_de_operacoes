@@ -813,6 +813,81 @@ def trabalhou(e):
     return e["status"] == "failed" or dur(e) > 5 or bool(e.get("recuperacao"))
 
 
+# ---------------------------------------------------------------- aviso de versão nova (19/10/2026)
+# A Sala tem um número de versão (arquivo VERSION ao lado do server.py). A cada 2 h o servidor lê o VERSION da main do
+# repositório público e, se o de lá for MAIOR que o local, o /api/state traz atualizacao.nova=true e a página mostra a tarja amarela.
+# Só lê (1 GET público, sem enviar dado nenhum além do IP); sem rede ou com resposta estranha não faz nada e tenta de novo em 30 min.
+# Desligar: "verificar_atualizacao": false no sala_config.json. SALA_VERSAO_REMOTA=<x.y.z> (ou vazio) dispensa a rede (testes).
+SALA_VERSAO_URL = "https://raw.githubusercontent.com/ToninhoRK/tRK-sala_de_operacoes/main/VERSION"
+SALA_REPO = "github.com/ToninhoRK/tRK-sala_de_operacoes"
+VERSAO_CHECA_S, VERSAO_RETENTA_S = 2 * 3600, 30 * 60
+BUSCAR_VERSAO = False      # só o processo do servidor (bloco __main__) liga: o vigia e os testes importam o módulo e nunca vão à rede
+_VERSAO = {"remota": None, "proxima": 0.0, "buscando": False, "checado_em": None}
+_VERSAO_RE = re.compile(r"^\d{1,4}\.\d{1,4}\.\d{1,4}$")
+
+
+def versao_local():
+    try:
+        with open(os.path.join(AQUI, "VERSION"), encoding="utf8") as f:
+            v = f.read(32).strip()
+        return v if _VERSAO_RE.match(v) else None
+    except OSError:
+        return None
+
+
+def _versao_num(v):
+    return tuple(int(x) for x in v.split(".")) if v and _VERSAO_RE.match(v) else None   # 1.10.0 > 1.9.0 (compara número, não texto)
+
+
+def _buscar_versao_remota():
+    """Texto do VERSION da main no GitHub, ou None. Nunca levanta."""
+    try:
+        import urllib.request
+        req = urllib.request.Request(SALA_VERSAO_URL, headers={"User-Agent": "sala-de-operacoes-versao"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            v = r.read(64).decode("utf8", "replace").strip()
+        return v if _VERSAO_RE.match(v) else None
+    except Exception:
+        return None
+
+
+def _atualizar_versao_remota():
+    v = _buscar_versao_remota()
+    agora = time.time()
+    if v:
+        _VERSAO["remota"], _VERSAO["checado_em"] = v, datetime.now().strftime("%Y-%m-%d %H:%M")
+    _VERSAO["proxima"] = agora + (VERSAO_CHECA_S if v else VERSAO_RETENTA_S)      # sem resposta: guarda o que sabia e tenta em 30 min
+    _VERSAO["buscando"] = False
+
+
+def _verificacao_ligada():
+    try:
+        return ler_json(CONFIG).get("verificar_atualizacao", True) is not False
+    except Exception:
+        return True
+
+
+def atualizacao_info(_sincrono=False):
+    """{local, remota, nova, repo, checado_em} para o /api/state; None se a Sala não tem VERSION. Nunca bloqueia a resposta (busca em thread)."""
+    local = versao_local()
+    if not local:
+        return None
+    if "SALA_VERSAO_REMOTA" in os.environ:
+        remota, checado = os.environ["SALA_VERSAO_REMOTA"].strip() or None, None
+    elif BUSCAR_VERSAO and _verificacao_ligada():
+        if time.time() >= _VERSAO["proxima"] and not _VERSAO["buscando"]:
+            _VERSAO["buscando"] = True
+            if _sincrono:
+                _atualizar_versao_remota()
+            else:
+                threading.Thread(target=_atualizar_versao_remota, daemon=True).start()
+        remota, checado = _VERSAO["remota"], _VERSAO["checado_em"]
+    else:
+        remota, checado = None, None
+    a, b = _versao_num(local), _versao_num(remota)
+    return {"local": local, "remota": remota, "nova": bool(a and b and b > a), "repo": SALA_REPO, "checado_em": checado}
+
+
 CLAUDE_USO = os.path.join(HERMES, "data", "claude_uso.json")   # gravado pelo statusLine do Claude Code (claude_statusline.py)
 
 def claude_uso():
@@ -1153,7 +1228,7 @@ def estado(dias=7):
     sem_setor = [i for i, (z, m) in origem.items() if m.startswith("padrão")]
     return {"now": agora.strftime("%Y-%m-%d %H:%M:%S"), "agents": agentes, "crons": crons,
             "feed": feed, "kpis": kp, "layout": layout, "sem_setor": sem_setor, "jarvis": jarvis, "claude_usage": claude_uso(), "vault": vault_painel(), "equipe_estacao": est_equipe, "equipe": equipe,
-            "saude": list(SAUDE), "periodo_dias": dias, "versao": 4}
+            "saude": list(SAUDE), "periodo_dias": dias, "atualizacao": atualizacao_info(), "versao": 5}
 
 
 def atividade(agente):
@@ -1306,4 +1381,5 @@ def arquivo_web(caminho):
 if __name__ == "__main__":
     porta = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
     print("Sala de Operações em http://127.0.0.1:%d" % porta, flush=True)
+    BUSCAR_VERSAO = True
     ThreadingHTTPServer(("127.0.0.1", porta), H).serve_forever()
