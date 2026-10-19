@@ -169,7 +169,7 @@ body.lista:not(.tv) #lista{display:block} body.lista:not(.tv) #svg,body.lista:no
 /* teclado na planta */
 .st:focus{outline:none} .st:focus-visible .hex{stroke:#fff;stroke-width:2.5}
 #lat{background:var(--panel);color:var(--muted);border:1px solid var(--line2);font:11px var(--mono);letter-spacing:.12em;padding:5px 10px;border-radius:3px;cursor:pointer}
-body.semlat #lat{color:var(--cyan);border-color:var(--cyan)}
+#lat[aria-pressed="true"]{color:var(--cyan);border-color:var(--cyan)}   /* acesa = painel VISÍVEL (como a chave OFFICE|LISTA e o SOM: acesa é o que está ligado) */
 body.semlat:not(.tv) main{grid-template-columns:1fr} body.semlat:not(.tv) #lateral{display:none}
 body.tv #lat{display:none}
 header{position:relative}

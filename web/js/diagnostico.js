@@ -68,6 +68,18 @@ function lateralAutoteste(){
   select(antes);
   return ruins.length?['painel lateral: atividade recente espremida ('+innerWidth+'x'+innerHeight+') com '+ruins.slice(0,6).join(', ')+(ruins.length>6?' e mais '+(ruins.length-6):'')]:[];
 }
+// Botão PAINEL: aceso (aria-pressed=true) só quando o painel lateral está visível; clicar inverte os dois; devolve o estado de antes.
+function painelBotaoAutoteste(){
+  const b=document.getElementById('lat'), lat=document.getElementById('lateral');
+  if(!b||!lat||document.body.classList.contains('tv'))return [];
+  const guardado=(()=>{try{return localStorage.getItem('sala_lateral')}catch(e){return null}})(), r=[];
+  const ok=()=>(b.getAttribute('aria-pressed')==='true')===(getComputedStyle(lat).display!=='none');
+  if(!ok())r.push('botão PAINEL: aceso não corresponde ao painel visível (estado inicial)');
+  b.click(); if(!ok())r.push('botão PAINEL: aceso não corresponde ao painel visível (depois de clicar)');
+  b.click(); if(!ok())r.push('botão PAINEL: aceso não corresponde ao painel visível (depois de clicar de novo)');
+  try{if(guardado===null)localStorage.removeItem('sala_lateral');else localStorage.setItem('sala_lateral',guardado)}catch(e){}
+  return r;
+}
 // Filtro da atividade recente: clicar em SÓ EXCEÇÕES deixa só exceções (nenhum ponto verde de OK) e marca o botão; TUDO volta a lista inteira.
 function feedAutoteste(){
   const bE=document.querySelector('#feedf button[data-f="excecoes"]'), bT=document.querySelector('#feedf button[data-f="tudo"]'), fw=document.getElementById('feedwrap');
@@ -143,6 +155,7 @@ function debugReport(){
   csvAutoteste().forEach(errPush);
   feedAutoteste().forEach(errPush);
   lateralAutoteste().forEach(errPush);
+  painelBotaoAutoteste().forEach(errPush);
   const R=(b,k,id,t)=>({k,x:b.x,y:b.y,w:b.width,h:b.height,id,t});
   const A=[];
   document.querySelectorAll('.lb').forEach(g=>{const id=g.dataset.id;g.querySelectorAll('text').forEach(t=>A.push(R(t.getBBox(),'label '+id,id,'label')))});

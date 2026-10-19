@@ -22,7 +22,9 @@ function initPan(){
 initPan();
 // painel lateral recolhível (telas menores): fica salvo no navegador
 if(localStorage.getItem('sala_lateral')==='0')document.body.classList.add('semlat');
-$('lat').addEventListener('click',()=>{const f=document.body.classList.toggle('semlat');localStorage.setItem('sala_lateral',f?'0':'1');setTimeout(()=>window.dispatchEvent(new Event('resize')),0)});
+function latMarca(){$('lat').setAttribute('aria-pressed',document.body.classList.contains('semlat')?'false':'true')}   // pressionado = painel visível
+latMarca();
+$('lat').addEventListener('click',()=>{const f=document.body.classList.toggle('semlat');localStorage.setItem('sala_lateral',f?'0':'1');latMarca();setTimeout(()=>window.dispatchEvent(new Event('resize')),0)});
 
 /* ---------- atualização com dados do servidor ---------- */
 function all(){return STATE?[...STATE.agents,...STATE.crons,...(STATE.jarvis?[STATE.jarvis]:[]),...(STATE.equipe_estacao||[])]:[]}
