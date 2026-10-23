@@ -74,7 +74,7 @@ At the top, a verdict answers first: **NORMAL**, **ATTENTION** or **FAILURE**. N
 
 - **Work passed from hand to hand:** stations in a chain are connected by lines that light up when the source runs. When an agent in the chain starts running, the employee from the previous step walks a folder over to their desk: you can watch data being handed over between rooms.
 - **What it is doing right now:** click an agent's employee and a panel on the right shows, live, the full model reasoning, replies and commands, and the start of each result. The room keeps running behind it. Prefer less? In SETTINGS, "Agent activity: Summary" shows only the time and the name of each tool.
-- **The brain has a desk too:** the main Hermes agent is Jarvis, a robot in the boardroom (DIRETORIA), which shows **TALKING TO YOU** while you are talking to it.
+- **The brain has a desk too:** the main Hermes agent is Jarvis, a robot in the boardroom (DIRETORIA), which shows **TALKING TO YOU** while you are talking to it and turns amber with **WAITING FOR YOU** (and a "?" bubble) when it asked a question with options and is waiting for your answer.
 - **Panels on the wall:** the note count of your Obsidian vault (how many arrived today and this week, and the audit result) and your team queue totals hang on the room walls, like in a real office.
 - **A late job doesn't go unnoticed:** if a scheduled job didn't fire on time (or an agent went past its agreed interval without running), its station turns amber and the alarm goes off. Green only when it is really up to date.
 - **Sound alerts:** a short sound when something fails, hangs or runs late, and a softer one when it is back to normal. The room keeps watching even with the tab in the background.

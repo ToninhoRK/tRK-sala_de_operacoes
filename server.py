@@ -718,6 +718,26 @@ def cron_dados():
 
 
 SESSAO_ATIVA_S = 90                       # conversa com mensagem nos últimos 90 s = Jarvis "atendendo"
+AGUARDANDO_MAX_S = 3600   # pergunta com opções sem resposta há mais que isso = conversa abandonada (terminal fechado): não conta
+
+def pergunta_pendente(con, sid):
+    """Hora da pergunta com opções (ferramenta clarify) ainda SEM resposta na sessão, ou None. Só ids e nomes de ferramenta:
+    nunca lê o texto da pergunta. Testado ao vivo (23/10/2026): a chamada entra no state.db na hora e o resultado só quando o
+    usuário responde. Agentes (oneshot) nunca esperam: o Hermes devolve na hora "sem usuário disponível"."""
+    r = con.execute("select tool_calls, timestamp, id from messages where session_id=? and role='assistant' and tool_calls like '%clarify%' "
+                    "order by id desc limit 1", (sid,)).fetchone()
+    if not r:
+        return None
+    if con.execute("select 1 from messages where session_id=? and role='assistant' and id>?", (sid, r[2])).fetchone():
+        return None          # a conversa seguiu depois (pergunta interrompida sem resultado gravado): não está esperando
+    try:
+        ids = [c.get("id") for c in json.loads(r[0]) if "clarify" in ((c.get("function") or {}).get("name") or "")]
+    except Exception:
+        return None
+    for i in ids:
+        if i and not con.execute("select 1 from messages where session_id=? and role='tool' and tool_call_id=?", (sid, i)).fetchone():
+            return r[1]
+    return None
 FONTES_NAO_INTERATIVAS = ("oneshot", "cron", "subagent")   # execuções de agente/cron/subagente não são conversa
 
 
@@ -726,7 +746,8 @@ def jarvis_estado():
     origem, modelo e hora da última mensagem. NUNCA lê o conteúdo das mensagens."""
     base = {"id": "jarvis", "kind": "jarvis", "name": "Jarvis",
             "desc": "Hermes principal: o modelo com quem você conversa e que aciona os agentes. Atende você quando há conversa ativa e fica disponível quando não há.",
-            "status": "ok", "model": None, "source": None, "last_activity": None, "active_sessions": 0}
+            "status": "ok", "model": None, "source": None, "last_activity": None, "active_sessions": 0,
+            "aguardando": False, "aguardando_s": None}
     try:
         con = sqlite3.connect("file:%s?mode=ro" % STATE_DB, uri=True, timeout=3)
         marcas = ",".join("?" * len(FONTES_NAO_INTERATIVAS))
@@ -745,6 +766,11 @@ def jarvis_estado():
                     melhor = (ultima, src, modelo)
             if ultima and (base["last_activity"] is None or ultima > base["last_activity"]):
                 base["last_activity"] = ultima
+            if ultima and agora - ultima <= AGUARDANDO_MAX_S and not base["aguardando"]:
+                p = pergunta_pendente(con, sid)
+                if p and agora - p <= AGUARDANDO_MAX_S:
+                    base["aguardando"], base["aguardando_s"] = True, int(agora - p)
+                    melhor = (max(ultima, melhor[0]) if melhor else ultima, src, modelo)   # esperando você = em conversa
         con.close()
         if melhor:
             base["status"], base["source"], base["model"] = "running", melhor[1], melhor[2]
@@ -1222,13 +1248,14 @@ def estado(dias=7):
     est_equipe, equipe = equipe_painel()
     layout, origem = montar_layout(cat, [c["id"] for c in crons], [p["id"] for p in est_equipe])
     jarvis = jarvis_estado()
+    kp["aguardando"] = 1 if jarvis.get("aguardando") else 0     # Jarvis com pergunta com opções esperando você (ATENÇÃO; som, sem e-mail)
     for x in todos + [jarvis] + est_equipe:
         z, motivo = origem.get(x["id"], ("", ""))
         x["setor"], x["setor_motivo"] = z, motivo
     sem_setor = [i for i, (z, m) in origem.items() if m.startswith("padrão")]
     return {"now": agora.strftime("%Y-%m-%d %H:%M:%S"), "agents": agentes, "crons": crons,
             "feed": feed, "kpis": kp, "layout": layout, "sem_setor": sem_setor, "jarvis": jarvis, "claude_usage": claude_uso(), "vault": vault_painel(), "equipe_estacao": est_equipe, "equipe": equipe,
-            "saude": list(SAUDE), "periodo_dias": dias, "atualizacao": atualizacao_info(), "versao": 5}
+            "saude": list(SAUDE), "periodo_dias": dias, "atualizacao": atualizacao_info(), "versao": 6}
 
 
 # Atividade AO VIVO (23/10/2026): a mesma leitura do modo ao vivo do terminal (rodar_agente.py). Raciocínio, respostas e

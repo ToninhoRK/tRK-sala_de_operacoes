@@ -14,6 +14,7 @@ function somFoto(s){
   const it={};
   (s.agents||[]).forEach(a=>it[a.id]={st:a.status,err:a.errors_today||0,stuck:a.status==='running'&&a.sem_acao_s>=300,late:atrasado(a)});
   (s.crons||[]).forEach(c=>it[c.id]={st:c.status,err:c.failed_today||0,stuck:false,late:atrasado(c)});
+  if(s.jarvis)it.jarvis={st:s.jarvis.aguardando?'running':'ok',err:0,stuck:!!s.jarvis.aguardando,late:false};   // pergunta esperando você: um aviso (sem e-mail: o vigia não olha o Jarvis)
   return {it,saude:new Set((s.saude||[]).map(x=>x.fonte))};
 }
 function somEventos(a,b){              // a = foto anterior, b = atual; devolve [[tipo,id],...] com tipo falha | aviso | volta
@@ -82,5 +83,9 @@ function somAutoteste(){
     ['fim da manutenção já OK',F({a:{st:'manut',err:1,bad:true}}),F({a:{st:'ok',err:1}}),'volta'],
   ];
   casos.forEach(([n,a,b,esp])=>{const ev=somEventos(a,b).map(e=>e[0]).join(',');if(ev!==esp)r.push('som: '+n+' → "'+ev+'" (esperado "'+esp+'")')});
+  // Jarvis: pergunta passa a esperar você = um aviso; continua esperando = nada; respondida = nada (não é falha que "voltou")
+  const J=a=>somFoto({jarvis:{aguardando:a}});
+  [['Jarvis passou a aguardar você',J(false),J(true),'aviso'],['Jarvis continua aguardando',J(true),J(true),''],['pergunta respondida',J(true),J(false),'']]
+    .forEach(([n,a,b,esp])=>{const ev=somEventos(a,b).map(e=>e[0]).join(',');if(ev!==esp)r.push('som: '+n+' → "'+ev+'" (esperado "'+esp+'")')});
   return r;
 }

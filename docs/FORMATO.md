@@ -122,6 +122,10 @@ Hermes; sem ele, o job aparece só com o estado do `jobs.json`.
 Na tela **JOBS**, o agendamento por extenso e as próximas execuções (7 dias) saem de `schedule.expr` (cron de 5 campos:
 `*`, listas, intervalos e passos; dia do mês e dia da semana restritos ao mesmo tempo valem com OU, como no cron). Agendamento
 que não é cron mostra o `display` e a próxima execução do `next_run_at`. Job pausado ou desligado não tem próximas.
+Na versão 6 do `/api/state`, `jarvis` ganhou `aguardando` (pergunta com opções do Hermes, a ferramenta `clarify`, sem resposta
+numa conversa ativa; nunca o texto da pergunta; esquecida há mais de 1 h não conta) e `aguardando_s`, e `kpis` ganhou
+`aguardando` (0 ou 1).
+
 A partir da versão 4 do `/api/state`, cada job traz `agenda_texto`, `proximas` (`[["AAAA-MM-DD HH:MM", em manutenção]]`),
 `diario` (`[OK, falhas, em manutenção]` por dia do período; `null` antes do primeiro registro), `duracao`
 (`media_s`, `max_s`, `n`, `soma_s` das execuções OK fora de manutenção) e `ultimas`; e `kpis.jobs_dados_desde`.

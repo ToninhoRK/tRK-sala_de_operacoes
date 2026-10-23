@@ -276,6 +276,38 @@ class Executor(Base):
         self.state_db_ao_vivo("liste os usuários")                     # pedido de lista: o nome aparece, como no terminal
         self.assertIn("Fulano Teste", server.atividade("consulta_a", "vivo")["events"][2]["txt"])
 
+    def test_jarvis_aguardando_voce(self):
+        """Pergunta com opções (clarify) sem resposta numa conversa = AGUARDANDO VOCÊ; respondida, de agente (oneshot) ou
+        abandonada há mais de 1 h não conta. Nunca o texto da pergunta."""
+        import sqlite3
+        server.STATE_DB = os.path.join(self.tmp, "state_jarvis.db")
+        con = sqlite3.connect(server.STATE_DB)
+        con.execute("create table sessions (id text, source text, model text, started_at real)")
+        con.execute("create table messages (id integer primary key, session_id text, role text, content text, tool_calls text, "
+                    "tool_call_id text, tool_name text, timestamp real)")
+        agora = time.time()
+        perg = lambda cid: json.dumps([{"id": cid, "function": {"name": "clarify", "arguments": json.dumps({"questions": [{"question": "PERGUNTA-SECRETA?"}]})}}])
+        def sessao(sid, src, t, respondida):
+            con.execute("insert into sessions values (?,?,?,?)", (sid, src, "m-jarvis", t - 60))
+            con.execute("insert into messages (session_id, role, tool_calls, timestamp) values (?,?,?,?)", (sid, "assistant", perg("c-" + sid), t))
+            if respondida:
+                con.execute("insert into messages (session_id, role, content, tool_call_id, timestamp) values (?,?,?,?,?)", (sid, "tool", "{}", "c-" + sid, t + 5))
+        sessao("respondida", "cli", agora - 400, True)
+        sessao("agente", "oneshot", agora - 30, False)
+        sessao("velha", "cli", agora - 5000, False)
+        sessao("interrompida", "cli", agora - 300, False)             # pergunta cortada sem resultado, e a conversa seguiu
+        con.execute("insert into messages (session_id, role, content, timestamp) values ('interrompida', 'assistant', 'seguiu', ?)", (agora - 100,))
+        con.commit()
+        j = self.estado()["jarvis"]
+        self.assertFalse(j["aguardando"])
+        sessao("aberta", "cli", agora - 200, False)                     # 200 s esperando: já passou dos 90 s de "atendendo"
+        con.commit(); con.close()
+        s = self.estado()
+        j = s["jarvis"]
+        self.assertTrue(j["aguardando"]); self.assertGreaterEqual(j["aguardando_s"], 199)
+        self.assertEqual(j["status"], "running"); self.assertEqual(s["kpis"]["aguardando"], 1)
+        self.assertNotIn("PERGUNTA-SECRETA", json.dumps(s))
+
     def test_tendencia_nomes_e_dias_uteis(self):
         self.log("a", [(ts(86400 * 2), "consulta_a", "m1", 0, False), (ts(60), "consulta_a", "m1", 3, False), (ts(9 * 86400), "consulta_a", "m1", 0, False)])
         s = self.estado()
@@ -379,7 +411,7 @@ class Indicadores(Base):
         self.assertEqual(c["intervalo"]["agenda_texto"], "a cada 2 h")             # agendamento que não é cron: texto do jobs.json
         self.assertEqual(len(c["intervalo"]["proximas"]), 1)                       # e a próxima do jobs.json
         self.assertEqual(s["kpis"]["jobs_dados_desde"], (agora - timedelta(days=3)).strftime("%Y-%m-%d"))
-        self.assertEqual(s["versao"], 5)
+        self.assertEqual(s["versao"], 6)
 
     def test_periodo_e_indice_de_sucesso(self):
         self.log("a", [(ts(40 * 86400), "consulta_a", "m1", 0, False), (ts(10 * 86400), "consulta_a", "m1", 1, False),

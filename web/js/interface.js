@@ -40,7 +40,7 @@ function update(s){
     if(STATIONS[it.id])STATIONS[it.id].it=it;
     const late=atrasado(it);
     document.querySelectorAll('.st:not(.lb)[data-id="'+it.id+'"]').forEach(g=>{if(!g.hasAttribute('tabindex')){g.setAttribute('tabindex','0');g.setAttribute('role','button')}g.setAttribute('aria-label',label(it.id)+': '+estadoTxt(it))});
-    document.querySelectorAll('.st[data-id="'+it.id+'"], .wk[data-id="'+it.id+'"]').forEach(g=>{setStatusClass(g,it.status);g.classList.toggle('late',late);g.classList.toggle('velho',!!it.antigo&&!late&&it.status!=='manut');g.classList.toggle('stuck',it.status==='running'&&it.sem_acao_s>=300)});
+    document.querySelectorAll('.st[data-id="'+it.id+'"], .wk[data-id="'+it.id+'"]').forEach(g=>{setStatusClass(g,it.status);g.classList.toggle('late',late);g.classList.toggle('velho',!!it.antigo&&!late&&it.status!=='manut');g.classList.toggle('stuck',estStuck(it))});
   });
   if(SEL)select(SEL);
   if(built)pastasChecar(antes);
@@ -70,7 +70,9 @@ function update(s){
 // atrasado = rotina que deveria ter rodado e não rodou (job com a próxima rodada vencida; agente com cadência vencida); falha e rodando têm prioridade
 function fmtAtraso(s){s=Math.max(0,s|0);return s<3600?Math.max(1,Math.round(s/60))+' MIN':s<86400?Math.floor(s/3600)+'H'+(Math.floor(s%3600/60)?pad(Math.floor(s%3600/60))+T('','M'):''):Math.floor(s/86400)+' D'}   // 1H30 (inglês: 1H30M)
 // texto do estado para leitor de tela e modo lista
-function estadoTxt(it){return it.status==='manut'?T('em manutenção','under maintenance'):it.status==='error'?T('falha','failed'):it.status==='running'?(it.sem_acao_s>=300?T('rodando, sem ação','running, no activity'):T('rodando','running')):atrasado(it)?T('atrasado','late'):it.status==='ok'?T('última execução OK','last run OK'):T('sem histórico','no history')}
+// âmbar de atenção na estação: agente rodando sem ação há 5 min, ou o Jarvis com uma pergunta com opções esperando você (23/10/2026)
+function estStuck(it){return !!it&&((it.status==='running'&&it.sem_acao_s>=300)||(it.kind==='jarvis'&&!!it.aguardando))}
+function estadoTxt(it){if(it.kind==='jarvis'&&it.aguardando)return T('aguardando você','waiting for you');return it.status==='manut'?T('em manutenção','under maintenance'):it.status==='error'?T('falha','failed'):it.status==='running'?(it.sem_acao_s>=300?T('rodando, sem ação','running, no activity'):T('rodando','running')):atrasado(it)?T('atrasado','late'):it.status==='ok'?T('última execução OK','last run OK'):T('sem histórico','no history')}
 // barras de execuções por dia (cinza) com a parte de falhas em vermelho; hoje à direita, um tom mais claro. Cinza: ciano é só "rodando"
 function spark(t,w=112,h=26){
   let v=(t||[]).map(x=>Array.isArray(x)?x:[x.execucoes,x.falhas]); if(!v.length)return '';
@@ -84,6 +86,7 @@ function atrasado(it){return !!(it&&it.atrasado_s)&&it.status!=='error'&&it.stat
 // veredito da operação: FALHA > ATENÇÃO (sem ação, atrasado, fonte de dados com problema) > NORMAL
 function veredito(s){
   const k=s.kpis, sd=(s.saude||[]).length, p=[], pl=(n,a,b)=>n+' '+(n>1?b:a);
+  if(k.aguardando)p.push(T('Jarvis aguardando você','Jarvis waiting for you'));
   if(k.late)p.push(pl(k.late,T('atrasado','late'),T('atrasados','late'))); if(k.stuck)p.push(pl(k.stuck,T('sem ação','with no activity'),T('sem ação','with no activity'))); if(sd)p.push(pl(sd,T('fonte com problema','source with a problem'),T('fontes com problema','sources with a problem')));
   if(k.in_error)return {t:T('FALHA','FAILURE'),c:'r',d:pl(k.in_error,T('estação em falha','station failed'),T('estações em falha','stations failed'))+(p.length?' · '+p.join(' · '):'')};
   if(p.length)return {t:T('ATENÇÃO','ATTENTION'),c:'a',d:p.join(' · ')};
@@ -121,7 +124,7 @@ function tick(){
       else sx.textContent=T('ABERTO ','OPEN ')+f(it.abertos)+T(' · HOJE ',' · TODAY ')+f(it.encerrados);   // equipe em 2+ colunas: 2 linhas, como as outras estações
       return;
     }
-    if(it.kind==='jarvis') t=JSTL[it.status];
+    if(it.kind==='jarvis') t=it.aguardando?T('AGUARDANDO VOCÊ','WAITING FOR YOU'):JSTL[it.status];
     else if(it.status==='running') t=(it.sem_acao_s>=300?T('SEM AÇÃO HÁ ','NO ACTIVITY FOR ')+Math.round((it.sem_acao_s+el0)/60)+' MIN':T('RODANDO ','RUNNING ')+mmss((it.elapsed_s||0)+el0));
     else if(it.status==='manut'){const d=parseTs(it.manutencao.ate+':00'),n=new Date();t=T('MANUT. ATÉ ','MAINT. UNTIL ')+(d.toDateString()===n.toDateString()?pad(d.getHours())+':'+pad(d.getMinutes()):diaMes(d))}   // curto: o rótulo não pode crescer
     else if(atrasado(it)) t=(it.kind!=='cron'&&!it.last)?T('ATRASADO · NUNCA RODOU','LATE · NEVER RAN'):T('ATRASADO HÁ ','LATE BY ')+fmtAtraso(it.atrasado_s+el0);
@@ -129,7 +132,7 @@ function tick(){
     else if(it.last) t=(it.status==='error'?T('FALHA · ','FAILED · '):T('ÚLT. ','LAST '))+fmtTs(it.last.ts);   // antigo: só o selo e o texto apagados (sufixo com dias alargava o rótulo e encostava na mesa vizinha)
     else t=T('SEM EXECUÇÕES','NO RUNS');
     sx.textContent=t;
-    g.classList.toggle('stuck',it.status==='running'&&it.sem_acao_s>=300);
+    g.classList.toggle('stuck',estStuck(it));
     g.classList.toggle('late',atrasado(it)); g.classList.toggle('velho',!!it.antigo&&!atrasado(it)&&it.status!=='manut');
   });
   renderTV();
@@ -183,6 +186,7 @@ function renderDetail(){
     add(T('Lido há','Read'),eq.age_s==null?'—':(eq.age_s<90?T('instantes','just now'):T(Math.round(eq.age_s/60)+' min',Math.round(eq.age_s/60)+' min ago'))+(eq.velho?T(' (defasado)',' (stale)'):''));
   } else if(it.kind==='jarvis'){
     add(T('Papel','Role'),T('Hermes principal: o modelo com quem você conversa e que aciona os agentes','Main Hermes: the model you talk to and that triggers the agents'));
+    if(it.aguardando)add(T('Aguardando você','Waiting for you'),'<span style="color:var(--amber)">'+T('há ','for ')+fmtDur(it.aguardando_s||0)+'</span> <span style="color:var(--dim)">'+T('(pergunta com opções sem resposta)','(question with options not answered)')+'</span>');
     add(T('Modelo em uso','Model in use'),esc(it.model||'—')); add(T('Origem da conversa','Conversation source'),esc(it.source||'—'));
     add(T('Conversas ativas','Active conversations'),String(it.active_sessions||0)+' <span style="color:var(--dim)">'+T('(mensagem nos últimos 90 s)','(message in the last 90 s)')+'</span>');
     add(T('Última atividade','Last activity'),it.last_activity?fmtTs(it.last_activity)+' · '+rel(it.last_activity):'—');
@@ -195,7 +199,7 @@ function renderDetail(){
   }
   const rec=(it.recent||[]).slice(0,5).map(e=>`<div class="mini"><span>${fmtTs(e.ts)}</span><span>${modelShort(e.model)}${e.dur!=null?' · '+fmtDur(e.dur):''}</span><span style="color:var(--${e.code?'red':'green'})">${e.code?(e.interrompida?T('INTERR.','INTERR.'):T('ERRO','ERROR')):'OK'}</span></div>`).join('');
   d.innerHTML=`<h2>${T('Estação','Station')} <span>${it.kind==='cron'?T('AGENDADOR','SCHEDULER'):(it.kind==='jarvis'?T('HERMES PRINCIPAL','MAIN HERMES'):(it.kind==='equipe'?T('EQUIPE AGIDESK','AGIDESK TEAM'):T('AGENTE','AGENT')))}</span></h2>
-    <div class="nm">${esc(it.kind==='equipe'?it.name:label(it.id))} <span class="chip ${it.status}">${(it.kind==='jarvis'?JSTL:STL)[it.status]}</span></div>
+    <div class="nm">${esc(it.kind==='equipe'?it.name:label(it.id))} <span class="chip ${it.kind==='jarvis'&&it.aguardando?'stuck':it.status}">${it.kind==='jarvis'?(it.aguardando?T('AGUARDANDO VOCÊ','WAITING FOR YOU'):JSTL[it.status]):STL[it.status]}</span></div>
     <div class="ds">${esc(it.desc)}</div><dl>${rows}</dl>${it.kind==='equipe'?'<div class="ds" style="margin-top:8px">'+T('Só totais da equipe: a Sala não mostra números por pessoa.','Team totals only: the room does not show numbers per person.')+'</div>':''}${rec?'<h2 style="margin:14px 0 4px">'+T('Últimas execuções','Latest runs')+'</h2>'+rec:''}`;
   marcarRolagem();
 }
@@ -206,9 +210,10 @@ function desdeTxt(it,P){const d=it.historico_desde;if(!d)return '';const ini=new
 function renderTV(){
   if(!temaTV(CFG.tema)||!STATE)return;
   const el0=(Date.now()-STATE._t)/1000, f=v=>v==null?'—':v;
-  const L=[...STATE.agents,...STATE.crons].map(it=>{
+  const L=[...STATE.agents,...STATE.crons,...(STATE.jarvis&&STATE.jarvis.aguardando?[STATE.jarvis]:[])].map(it=>{
     let o=null;
-    if(it.status==='error')o={c:'error',p:0,t:T('FALHA','FAILED')+(it.kind==='cron'?(it.last_run?' · '+fmtTs(it.last_run.replace('T',' ').slice(0,19)):''):(it.last?' · '+fmtTs(it.last.ts):''))};
+    if(it.kind==='jarvis')o={c:'stuck',p:1,t:T('AGUARDANDO VOCÊ HÁ ','WAITING FOR YOU FOR ')+Math.max(1,Math.round(((it.aguardando_s||0)+el0)/60))+' MIN'};
+    else if(it.status==='error')o={c:'error',p:0,t:T('FALHA','FAILED')+(it.kind==='cron'?(it.last_run?' · '+fmtTs(it.last_run.replace('T',' ').slice(0,19)):''):(it.last?' · '+fmtTs(it.last.ts):''))};
     else if(it.status==='running'&&it.sem_acao_s>=300)o={c:'stuck',p:1,t:T('RODANDO · SEM AÇÃO HÁ ','RUNNING · NO ACTIVITY FOR ')+Math.round((it.sem_acao_s+el0)/60)+' MIN'};
     else if(atrasado(it))o={c:'stuck',p:1,t:T('ATRASADO HÁ ','LATE BY ')+fmtAtraso(it.atrasado_s+el0)+(it.kind==='cron'&&it.next_run?T(' · PREVISTO ',' · DUE ')+fmtTs(it.next_run.replace('T',' ').slice(0,19)):'')};
     else if(it.status==='running')o={c:'running',p:2,t:T('RODANDO ','RUNNING ')+mmss((it.elapsed_s||0)+el0)};
@@ -240,7 +245,7 @@ function demo(s){
   s.feed=[con&&{ts:f(1),agent:con.id,type:'agent',model:'nvidia/nemotron-3-super-120b-a12b',code:1,fallback:false},
           rot&&{ts:f(19),agent:rot.id,type:'agent',model:'claude-sonnet-5-5',code:0,fallback:true},
           cr&&{ts:f(35),agent:cr.id,type:'cron',code:0,dur:292}].filter(Boolean).concat(s.feed).slice(0,40);
-  if(s.jarvis){const jr=QS.get('jarvis')==='running';s.jarvis.status=jr?'running':'ok';s.jarvis.active_sessions=jr?1:0}
+  if(s.jarvis){const jq=QS.get('jarvis'),jr=jq==='running'||jq==='aguardando';s.jarvis.status=jr?'running':'ok';s.jarvis.active_sessions=jr?1:0;s.jarvis.aguardando=jq==='aguardando';s.jarvis.aguardando_s=jq==='aguardando'?140:null}   // ?jarvis=aguardando: pergunta esperando você
   s.claude_usage={updated_at:0,age_s:120,five_hour:{pct:34,resets_at:Math.floor(Date.now()/1000)+9000,reset_passou:false},seven_day:{pct:78,resets_at:Math.floor(Date.now()/1000)+250000,reset_passou:false}};
   s.vault={total:900,age_s:60,por_tipo:{'tipo-a':349,'tipo-b':227,'tipo-c':151,'(sem tipo)':26,'tipo-d':24,'tipo-e':14},delta_hoje:7,delta_semana:31,dias_semana:7,auditoria:{divergencias:0,age_s:300,categorias:{}}};
   // demonstração: período, consumo e equipe simulados (determinísticos, para as capturas; com 7 dias, os mesmos números de antes)
@@ -259,6 +264,6 @@ function demo(s){
   if(s.equipe){s.equipe.vencidos=3;(s.equipe_estacao||[]).forEach(e=>{if(!e.decor)Object.assign(e,{vencidos:3,encerrados_7d:41,atendimento_medio_h:22.5,atendimento_mediano_h:9.2})})}
   s.kpis={running:3,runs_today:14,errors_today:1,in_error:1,late:[...s.agents,...s.crons].filter(atrasado).length,stuck:QS.has('travado')?1:0,agents:s.agents.length,crons:s.crons.length,last_activity:s.feed[0].ts,
     tendencia:Array.from({length:P},(_,i)=>({dia:dd(i),execucoes:i===P-1?14:B7[m7(i)],falhas:F7[m7(i)]})),custo_usd:Math.round(4.03*P/7*100)/100,manut:[...s.agents,...s.crons].filter(x=>x.manutencao).length};
-  s.kpis.jobs_dados_desde=dd(0);
+  s.kpis.jobs_dados_desde=dd(0); s.kpis.aguardando=s.jarvis&&s.jarvis.aguardando?1:0;
   {const TD=s.kpis.tendencia,n=TD.reduce((a,x)=>a+x.execucoes,0),f=TD.reduce((a,x)=>a+x.falhas,0);s.kpis.sucesso={execucoes:n,falhas:f,pct:Math.round(1000*(n-f)/n)/10}}
 }

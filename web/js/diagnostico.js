@@ -80,6 +80,23 @@ function painelBotaoAutoteste(){
   try{if(guardado===null)localStorage.removeItem('sala_lateral');else localStorage.setItem('sala_lateral',guardado)}catch(e){}
   return r;
 }
+// Jarvis AGUARDANDO VOCÊ (23/10/2026): com uma pergunta com opções sem resposta, a estação e o boneco ficam âmbar ("stuck"),
+// o rótulo diz AGUARDANDO VOCÊ, o balão mostra "?" e a Operação vai para ATENÇÃO; sem a pergunta, volta. Simula no STATE e desfaz.
+function aguardandoAutoteste(){
+  if(!STATE||!STATE.jarvis||!STATIONS.jarvis)return [];
+  const r=[], j=STATE.jarvis, guard={status:j.status,aguardando:j.aguardando,aguardando_s:j.aguardando_s,kp:STATE.kpis.aguardando}, P=m=>r.push('AGUARDANDO: '+m);
+  const st=()=>document.querySelector('.st.lb[data-id="jarvis"]'), wk=()=>document.querySelector('.wk[data-id="jarvis"]');
+  try{
+    Object.assign(j,{status:'running',aguardando:true,aguardando_s:150}); STATE.kpis.aguardando=1; update(STATE);
+    if(!st()||!st().classList.contains('stuck'))P('estação do Jarvis sem o âmbar');
+    if(st()&&!/AGUARDANDO VOCÊ|WAITING FOR YOU/.test(st().textContent))P('rótulo sem AGUARDANDO VOCÊ ('+(st()&&st().textContent)+')');
+    if(veredito(STATE).c!=='a'&&veredito(STATE).c!=='r')P('Operação não foi para ATENÇÃO');
+    if(WORKERS.jarvis){renderWorker(WORKERS.jarvis,SIMT);if(!wk()||!wk().classList.contains('stuck'))P('boneco do Jarvis sem o âmbar')}
+    Object.assign(j,{aguardando:false,aguardando_s:null}); STATE.kpis.aguardando=0; update(STATE);
+    if(st()&&st().classList.contains('stuck'))P('o âmbar ficou depois de respondida');
+  }finally{Object.assign(j,{status:guard.status,aguardando:guard.aguardando,aguardando_s:guard.aguardando_s});STATE.kpis.aguardando=guard.kp;update(STATE);if(WORKERS.jarvis)renderWorker(WORKERS.jarvis,SIMT)}
+  return r;
+}
 // Painel AO VIVO (23/10/2026): abre ao lado, abaixo do cabeçalho, sem passar da tela; mostra os 5 tipos de linha; escapa HTML;
 // texto comprido quebra sem rolar para o lado; clicar noutro lugar NÃO fecha (não é modal); × fecha; na opção "Resumida" o
 // clique abre a caixinha antiga e não o painel. Volta a opção do usuário no fim.
@@ -186,6 +203,7 @@ function debugReport(){
   csvAutoteste().forEach(errPush);
   feedAutoteste().forEach(errPush);
   vivoAutoteste().forEach(errPush);
+  aguardandoAutoteste().forEach(errPush);
   lateralAutoteste().forEach(errPush);
   painelBotaoAutoteste().forEach(errPush);
   const R=(b,k,id,t)=>({k,x:b.x,y:b.y,w:b.width,h:b.height,id,t});

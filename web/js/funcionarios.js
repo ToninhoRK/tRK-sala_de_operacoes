@@ -203,7 +203,7 @@ function renderWorker(w,t){
   w.pastaEl.style.display=w.carry?'':'none';
   w.dust.style.display=m==='run'?'':'none';
   if(m==='run'){w.dust.setAttribute('transform',`translate(${(-(w.face<0?-1:1)*10).toFixed(1)} 0)`);[...w.dust.children].forEach((c,i)=>c.setAttribute('opacity',(.12+.3*Math.abs(Math.sin(t*9-i*1.3))).toFixed(2)))}
-  const stuck=w.st.it.status==='running'&&w.st.it.sem_acao_s>=300;
+  const stuck=estStuck(w.st.it);      // rodando sem ação, ou o Jarvis com pergunta esperando você: "?" no balão
   const run=(m==='type'||m==='operate')&&!w.st.isEquipe&&!stuck, err=m==='alert'||((m==='type'||m==='operate')&&stuck);
   if(stuck!==!!w.stuck){w.stuck=stuck;w.root.classList.toggle('stuck',stuck)}
   w.bub.style.display=(run||err)?'':'none';
