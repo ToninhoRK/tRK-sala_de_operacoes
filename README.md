@@ -73,7 +73,7 @@ No topo, um veredito responde antes de tudo: **NORMAL**, **ATENÇÃO** ou **FALH
 ## Destaques
 
 - **Trabalho passando de mão em mão:** as estações de uma cadeia são ligadas por linhas que acendem quando a origem roda. Quando um agente da cadeia começa a rodar, o funcionário da etapa anterior leva uma pasta até a mesa dele: dá para ver a entrega de dados acontecer entre as salas.
-- **O que ele está fazendo agora:** clique no funcionário de um agente e veja, ao vivo, a hora e o nome de cada ferramenta que ele usa. Só o nome da ferramenta: nada do que foi perguntado ou respondido.
+- **O que ele está fazendo agora:** clique no funcionário de um agente e um painel à direita mostra, ao vivo, o raciocínio do modelo, as respostas e os comandos completos e o começo de cada resultado. A Sala continua andando atrás. Prefere menos? Em CONFIGURAR, "Atividade do agente: Resumida" mostra só a hora e o nome de cada ferramenta.
 - **O cérebro também tem mesa:** o Hermes principal é o Jarvis, um robô na Diretoria, que mostra **ATENDENDO VOCÊ** quando você está conversando com ele.
 - **Painéis na parede:** o total de notas do seu vault do Obsidian (quantas entraram hoje e na semana, e o resultado da auditoria) e os totais da fila da equipe ficam pendurados nas salas, como num escritório de verdade.
 - **Rotina atrasada não passa despercebida:** se um job agendado não disparou na hora (ou um agente passou do intervalo combinado sem rodar), a estação fica âmbar e o alarme avisa. Verde só quando está realmente em dia.
@@ -173,7 +173,7 @@ python3 manutencao.py encerrar rateio_mensal
 - **Uma única conexão de saída, que você pode desligar:** a cada 2 horas o servidor lê o arquivo `VERSION` público deste repositório para avisar de versão nova. Não envia nenhum dado seu (o GitHub só vê o endereço de rede). Com `"verificar_atualizacao": false` no arquivo local de configuração, a sala não fala com a internet.
 - **Somente leitura:** a sala só observa os agentes, nunca dispara nem altera nada. O vigia opcional só grava o histórico da própria sala e manda o e-mail de aviso.
 - **Zero tokens:** a sala não usa modelo de I.A. e só lê históricos e arquivos de estado.
-- **O conteúdo fica onde está:** o navegador recebe nome do agente, horário, modelo e resultado. Perguntas e respostas dos agentes nunca saem do lugar onde estão.
+- **O conteúdo fica no seu computador:** o painel ao vivo mostra trechos do trabalho do agente (raciocínio, respostas e comandos completos, começo dos resultados) e eles podem ter dados de trabalho. Esses trechos só vão do servidor local para o navegador local, com cortes de segurança: `app_key` mascarada, pasta pessoal como `~`, linhas com nomes e e-mails omitidas quando o pedido não pede uma lista. Nada é gravado nem enviado para fora. Para não ver conteúdo nenhum, escolha "Resumida" em CONFIGURAR.
 
 ## Qualidade
 

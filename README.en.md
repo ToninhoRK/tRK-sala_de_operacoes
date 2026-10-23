@@ -73,7 +73,7 @@ At the top, a verdict answers first: **NORMAL**, **ATTENTION** or **FAILURE**. N
 ## Highlights
 
 - **Work passed from hand to hand:** stations in a chain are connected by lines that light up when the source runs. When an agent in the chain starts running, the employee from the previous step walks a folder over to their desk: you can watch data being handed over between rooms.
-- **What it is doing right now:** click an agent's employee to see, live, the time and the name of every tool it uses. Only the tool name: nothing that was asked or answered.
+- **What it is doing right now:** click an agent's employee and a panel on the right shows, live, the full model reasoning, replies and commands, and the start of each result. The room keeps running behind it. Prefer less? In SETTINGS, "Agent activity: Summary" shows only the time and the name of each tool.
 - **The brain has a desk too:** the main Hermes agent is Jarvis, a robot in the boardroom (DIRETORIA), which shows **TALKING TO YOU** while you are talking to it.
 - **Panels on the wall:** the note count of your Obsidian vault (how many arrived today and this week, and the audit result) and your team queue totals hang on the room walls, like in a real office.
 - **A late job doesn't go unnoticed:** if a scheduled job didn't fire on time (or an agent went past its agreed interval without running), its station turns amber and the alarm goes off. Green only when it is really up to date.
@@ -173,7 +173,7 @@ python3 manutencao.py encerrar rateio_mensal
 - **One outgoing connection, which you can turn off:** every 2 hours the server reads this repository's public `VERSION` file to warn about a new version. It sends none of your data (GitHub only sees the network address). With `"verificar_atualizacao": false` in the local config file, the room does not talk to the internet.
 - **Read-only:** the room only watches the agents; it never triggers or changes anything. The optional watcher only writes the room's own history and sends the alert e-mail.
 - **Zero tokens:** the room uses no AI model and only reads histories and state files.
-- **Content stays where it is:** the browser receives the agent's name, time, model and result. The agents' questions and answers never leave where they are.
+- **Content stays on your computer:** the live panel shows excerpts of the agent's work (full reasoning, replies and commands, start of results), which may contain work data. These excerpts only go from the local server to the local browser, with safety cuts: `app_key` masked, home folder as `~`, lines with names and e-mails left out unless the request asks for a list. Nothing is stored or sent out. To see no content at all, choose "Summary" in SETTINGS.
 
 ## Quality
 

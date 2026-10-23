@@ -1231,8 +1231,84 @@ def estado(dias=7):
             "saude": list(SAUDE), "periodo_dias": dias, "atualizacao": atualizacao_info(), "versao": 5}
 
 
-def atividade(agente):
-    """Últimas ferramentas chamadas pelo agente (só NOME da ferramenta e hora; nunca argumentos, comandos nem respostas).
+# Atividade AO VIVO (23/10/2026): a mesma leitura do modo ao vivo do terminal (rodar_agente.py). Raciocínio, respostas e
+# comando vão COMPLETOS (_inteiro; o terminal corta em 600/220/260/260); do resultado, só a 1ª linha (140) e o nº de linhas,
+# como no terminal. Cortes de segurança iguais: app_key mascarada, pasta pessoal vira ~; linhas com nomes/e-mails/devices
+# omitidas do resultado quando o pedido não pede lista. As três funções abaixo copiam as do rodar_agente.py: mudou lá, mude aqui.
+def _curto(txt, n=150):
+    txt = re.sub(r"(app_key=)[^&\s\"']+", r"\1***", str(txt or ""))
+    txt = txt.replace(os.path.expanduser("~"), "~").replace("/usr/bin/python3 ", "")
+    txt = " ".join(txt.split())
+    return txt if len(txt) <= n else txt[:n - 1] + "…"
+
+def pede_lista(p):
+    return bool(re.search(r"\b(list[ae]|liste|listar|nomes?|quais (são )?(os )?(usuários|usuarios|devices|dispositivos|contas|pessoas)|quem (são|sao|é|e)|me mostre os (usuários|devices))\b", (p or "").lower()))
+
+def ocultar_pessoais(saida):
+    out, n = [], 0
+    for l in saida.splitlines():
+        if (l.startswith("- ") and ("@" in l or " | " in l)) or l.startswith("    * "): n += 1; continue
+        out.append(l)
+    if n: out.insert(next((i for i, l in enumerate(out) if l.startswith("[fim da consulta]")), len(out)), f"({n} linha(s) com nomes, e-mails ou devices individuais omitidas: a pergunta não pediu a lista; peça \"liste\" para ver. Os totais acima não mudam.)")
+    return "\n".join(out)
+
+VIVO_MAX = 150    # últimas linhas ao vivo enviadas (o total vai à parte)
+VIVO_TETO = 20000 # caracteres por texto completo (raciocínio, resposta, comando): só uma trava contra texto gigante
+
+def _inteiro(txt):
+    """Texto COMPLETO (23/10/2026: raciocínio, respostas e comando sem o "…" do terminal), com os mesmos
+    cortes de segurança do _curto(): app_key mascarada, pasta pessoal vira ~. Mantém as quebras de linha."""
+    txt = re.sub(r"(app_key=)[^&\s\"']+", r"\1***", str(txt or ""))
+    txt = txt.replace(os.path.expanduser("~"), "~").replace("/usr/bin/python3 ", "").strip()
+    txt = re.sub(r"\n{3,}", "\n\n", txt)
+    return txt if len(txt) <= VIVO_TETO else txt[:VIVO_TETO - 1] + "…"
+
+def linhas_ao_vivo(con, sid):
+    """Linhas do modo ao vivo de uma sessão: k = raciocinio | resposta (com chamada de ferramenta) | final | cmd | resultado."""
+    msgs = con.execute("select role, content, tool_calls, tool_name, reasoning, reasoning_content, timestamp from messages "
+                       "where session_id=? order by id", (sid,)).fetchall()
+    t0 = msgs[0][6] if msgs else 0
+    pedido = ""
+    for role, content, *_ in msgs:
+        if role == "user":
+            c = content or ""
+            pedido = c.split("PEDIDO DO USUÁRIO:", 1)[1] if "PEDIDO DO USUÁRIO:" in c else c
+            break
+    lista = pede_lista(pedido)
+    ev = []
+    for role, content, tc, tname, rs, rsc, ts in msgs:
+        base = {"t": datetime.fromtimestamp(ts).strftime("%H:%M:%S"), "el": int(ts - t0)}
+        if role == "assistant":
+            rc = rs or rsc or ""
+            if rc:
+                ev.append(dict(base, k="raciocinio", txt=_inteiro(rc)))
+            if content and content.strip():
+                ev.append(dict(base, k="resposta" if tc else "final", txt=_inteiro(content)))
+            try:
+                chamadas = json.loads(tc) if tc else []
+            except Exception:
+                chamadas = []
+            for c in chamadas:
+                f = c.get("function") or {}
+                try:
+                    args = json.loads(f.get("arguments") or "{}")
+                except Exception:
+                    args = {}
+                cmd = (args.get("command") or args.get("path") or args.get("file_path") or "") if isinstance(args, dict) else ""
+                ev.append(dict(base, k="cmd", tool=f.get("name", "?"), txt=_inteiro(cmd)))
+        elif role == "tool":
+            try:
+                saida = json.loads(content).get("output", content)
+            except Exception:
+                saida = content or ""
+            saida = str(saida) if lista else ocultar_pessoais(str(saida))
+            linhas = saida.splitlines()
+            ev.append(dict(base, k="resultado", tool=tname or "", n=len(linhas), txt=_curto(linhas[0] if linhas else "", 140)))
+    return ev
+
+def atividade(agente, modo="resumo"):
+    """Resumo (modo="resumo"): só NOME da ferramenta e hora. Ao vivo (modo="vivo"): raciocínio, comandos, começo dos
+    resultados e da resposta final, com os cortes de linhas_ao_vivo().
     O state.db não registra qual agente abriu a sessão: o vínculo é aproximado, por modelo + horário de início."""
     cat = ler_json(AGENTES)
     if agente not in cat:
@@ -1246,7 +1322,7 @@ def atividade(agente):
     else:
         h = [e for e in historico() if e["agent"] == agente]
         if not h:
-            return {"agent": agente, "live": False, "events": [], "total": 0, "sessao": None}
+            return {"agent": agente, "live": False, "events": [], "total": 0, "sessao": None, "modo": modo}
         fim = time.mktime(time.strptime(h[-1]["ts"], "%Y-%m-%d %H:%M:%S"))
         inicio = None
     try:
@@ -1264,19 +1340,22 @@ def atividade(agente):
                 sid = i; break
         if not sid:
             con.close()
-            return {"agent": agente, "live": ao_vivo, "events": [], "total": 0, "sessao": None}
+            return {"agent": agente, "live": ao_vivo, "events": [], "total": 0, "sessao": None, "modo": modo}
         ev, ultima = [], None
-        for tc, ts in con.execute("select tool_calls, timestamp from messages where session_id=? and role='assistant' and tool_calls is not null order by timestamp, id", (sid,)):
-            try:
-                for c in json.loads(tc):
-                    ev.append({"t": datetime.fromtimestamp(ts).strftime("%H:%M:%S"), "tool": (c.get("function") or {}).get("name", "?")})
-            except Exception:
-                pass
+        if modo == "vivo":
+            ev = linhas_ao_vivo(con, sid)
+        else:
+            for tc, ts in con.execute("select tool_calls, timestamp from messages where session_id=? and role='assistant' and tool_calls is not null order by timestamp, id", (sid,)):
+                try:
+                    for c in json.loads(tc):
+                        ev.append({"t": datetime.fromtimestamp(ts).strftime("%H:%M:%S"), "tool": (c.get("function") or {}).get("name", "?")})
+                except Exception:
+                    pass
         ultima = con.execute("select max(timestamp) from messages where session_id=?", (sid,)).fetchone()[0]
         con.close()
     except Exception as e:
         return {"erro": "state.db indisponível", "erro_en": "state.db unavailable"}
-    return {"agent": agente, "live": ao_vivo, "total": len(ev), "events": ev[-15:], "sessao": sid[:15],
+    return {"agent": agente, "live": ao_vivo, "modo": modo, "total": len(ev), "events": ev[-(VIVO_MAX if modo == "vivo" else 15):], "sessao": sid[:15],
             "parado_ha_s": int(agora - ultima) if (ao_vivo and ultima) else None}
 
 class H(BaseHTTPRequestHandler):
@@ -1321,8 +1400,10 @@ class H(BaseHTTPRequestHandler):
                 self._send(200, estado_json(dias if dias in PERIODOS else 7), "application/json; charset=utf-8")
             elif p == "/api/atividade":
                 from urllib.parse import urlparse, parse_qs
-                ag = (parse_qs(urlparse(self.path).query).get("agent") or [""])[0]
-                self._send(200, json.dumps(atividade(ag), ensure_ascii=False).encode("utf8"), "application/json; charset=utf-8")
+                q = parse_qs(urlparse(self.path).query)
+                ag = (q.get("agent") or [""])[0]
+                modo = "vivo" if (q.get("modo") or [""])[0] == "vivo" else "resumo"
+                self._send(200, json.dumps(atividade(ag, modo), ensure_ascii=False).encode("utf8"), "application/json; charset=utf-8")
             elif p in ("/", "/index.html"):
                 self._send(200, pagina_montada(), "text/html; charset=utf-8")
             elif p == "/3d":                   # endereço antigo do protótipo 3D: o 3D agora é um tema da própria Sala

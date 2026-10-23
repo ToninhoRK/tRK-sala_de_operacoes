@@ -235,6 +235,47 @@ class Executor(Base):
         self.assertAlmostEqual(c["custo_usd"], 0.51)
         self.assertFalse(c["aprox"])
 
+    def state_db_ao_vivo(self, pedido):
+        import sqlite3
+        server.STATE_DB = os.path.join(self.tmp, "state_vivo.db")
+        if os.path.exists(server.STATE_DB):
+            os.remove(server.STATE_DB)
+        con = sqlite3.connect(server.STATE_DB)
+        con.execute("create table sessions (id text, source text, model text, started_at real)")
+        con.execute("create table messages (id integer primary key, session_id text, role text, content text, tool_calls text, "
+                    "tool_name text, reasoning text, reasoning_content text, timestamp real)")
+        t = time.time() - 30
+        con.execute("insert into sessions values ('sv1', 'oneshot', 'm1', ?)", (t,))
+        casa = os.path.expanduser("~")
+        cmd = "/usr/bin/python3 %s/scripts/x.py && curl 'https://h/api?app_key=SEGREDO123&a=1'" % casa + " && echo " + "c" * 400
+        msgs = [("user", "PROMPT: liste sempre o total\n\nPEDIDO DO USUÁRIO:\n" + pedido, None, None, None, t),
+                ("assistant", "", json.dumps([{"function": {"name": "terminal", "arguments": json.dumps({"command": cmd})}}]), None, "r" * 700, t + 1),
+                ("tool", json.dumps({"output": "- Fulano Teste | fulano@exemplo.com\nTotal: 2"}), None, "terminal", None, t + 2),
+                ("assistant", "Total de usuários: 2", None, None, None, t + 3)]
+        con.executemany("insert into messages (session_id, role, content, tool_calls, tool_name, reasoning, timestamp) values ('sv1',?,?,?,?,?,?)", msgs)
+        con.commit(); con.close()
+
+    def test_atividade_ao_vivo_com_os_cortes_do_terminal(self):
+        self.rodando = {"consulta_a": 60}
+        self.state_db_ao_vivo("quantos usuários?")       # o "liste" do PROMPT não conta: só o pedido decide (como no terminal)
+        a = server.atividade("consulta_a", "vivo")
+        self.assertEqual([e["k"] for e in a["events"]], ["raciocinio", "cmd", "resultado", "final"])
+        r, c, res, fim = a["events"]
+        self.assertEqual(r["txt"], "r" * 700)                           # completo, sem o "…" do terminal
+        self.assertIn("app_key=***", c["txt"]); self.assertIn("~/scripts/x.py", c["txt"]); self.assertEqual(c["tool"], "terminal")
+        self.assertTrue(c["txt"].endswith("c" * 400))                  # comando inteiro
+        texto = json.dumps(a, ensure_ascii=False)
+        for proibido in ("SEGREDO123", os.path.expanduser("~") + "/", "/usr/bin/python3", "Fulano", "fulano@"):
+            self.assertNotIn(proibido, texto)
+        self.assertEqual((res["txt"], res["n"]), ("Total: 2", 2))       # linha da pessoa trocada pelo aviso
+        self.assertEqual(fim["txt"], "Total de usuários: 2")
+        self.assertEqual((a["live"], a["modo"]), (True, "vivo"))
+        resumo = server.atividade("consulta_a")                        # opção Resumida: só hora e ferramenta
+        self.assertEqual([sorted(e) for e in resumo["events"]], [["t", "tool"]])
+        self.assertNotIn("Total", json.dumps(resumo)); self.assertNotIn("rrr", json.dumps(resumo))
+        self.state_db_ao_vivo("liste os usuários")                     # pedido de lista: o nome aparece, como no terminal
+        self.assertIn("Fulano Teste", server.atividade("consulta_a", "vivo")["events"][2]["txt"])
+
     def test_tendencia_nomes_e_dias_uteis(self):
         self.log("a", [(ts(86400 * 2), "consulta_a", "m1", 0, False), (ts(60), "consulta_a", "m1", 3, False), (ts(9 * 86400), "consulta_a", "m1", 0, False)])
         s = self.estado()
@@ -712,6 +753,13 @@ class Servidor(Base):
         with urllib.request.urlopen(self.url + "/api/atividade?agent=../../etc", timeout=5) as r:
             corpo = r.read().decode()
         self.assertIn("desconhecido", corpo)
+        orig, server.atividade = server.atividade, lambda ag, modo="resumo": {"modo": modo}
+        try:
+            for q, esperado in (("modo=vivo", "vivo"), ("", "resumo"), ("modo=qualquer", "resumo")):
+                with urllib.request.urlopen(self.url + "/api/atividade?agent=consulta_a&" + q, timeout=5) as r:
+                    self.assertEqual(json.loads(r.read())["modo"], esperado, q)
+        finally:
+            server.atividade = orig
 
 
 class Recuperacao(Base):

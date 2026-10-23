@@ -62,9 +62,70 @@ function abrirPop(id,x,y){
   p.style.left=Math.max(8,Math.min(x+14,innerWidth-p.offsetWidth-8))+'px'; p.style.top=Math.max(8,Math.min(y+14,innerHeight-p.offsetHeight-8))+'px';
   POP=id; clearInterval(POPT); atualizarPop(); POPT=setInterval(atualizarPop,3000);
 }
+/* Painel AO VIVO (23/10/2026; padrão, CONFIGURAR > Atividade do agente): o que o modo ao vivo do terminal
+   mostra, mas com raciocínio, respostas e comandos completos (do resultado, só o começo), num painel largo à direita que não bloqueia
+   a Sala. Os cortes são feitos no servidor (/api/atividade?modo=vivo); aqui tudo passa por esc(). Fecha no × ou no Esc;
+   clicar noutro agente troca o painel. Na demonstração (?demo=1) as linhas são fictícias, geradas aqui. */
+let VIVO=null, VIVOT=null, VIVOK='';
+const VIVOTIPO={raciocinio:['🧠',T('raciocínio','reasoning')],resposta:['💭',T('resposta com chamada de ferramenta','reply with a tool call')],
+  final:['✎',T('resposta final redigida','final reply drafted')],cmd:['▶',''],resultado:['✔',T('resultado','result')]};
+function vivoLinha(e){
+  const [ic,nm]=VIVOTIPO[e.k]||['·',String(e.k)];
+  let cab=nm, txt=e.txt||'';
+  if(e.k==='cmd')cab=e.tool||'?';
+  if(e.k==='resultado'){cab=nm+(e.tool?' ('+e.tool+')':'')+' · '+e.n+' '+(e.n===1?T('linha','line'):T('linhas','lines'));txt=txt?T('começa com: ','starts with: ')+txt:T('(vazio)','(empty)')}
+  return '<div class="vl k-'+esc(e.k)+'"><span class="vt">'+esc(e.t)+'<i>+'+(+e.el||0)+'s</i></span><span class="vi" aria-hidden="true">'+ic+'</span><div class="vx"><b>'+esc(cab)+'</b>'+(txt?'<span>'+esc(txt)+'</span>':'')+'</div></div>';
+}
+function vivoDemo(id){            // demonstração: passos fictícios, que avançam com o tempo enquanto a estação "roda"
+  const it=all().find(i=>i.id===id)||{}, run=it.status==='running';
+  const P=[['raciocinio','',T('O pedido é um total. Vou rodar a consulta de exemplo e conferir o número antes de responder.','The request is a total. I will run the sample query and check the number before answering.')],
+    ['cmd','terminal','python3 ~/exemplo/consulta_exemplo.py --total'],['resultado','terminal',T('[consulta de exemplo] 3 registros encontrados','[sample query] 3 records found'),4],
+    ['raciocinio','',T('O script devolveu 3. Confiro também por categoria para não somar duas vezes.','The script returned 3. I also check by category so nothing is counted twice.')],
+    ['cmd','terminal','python3 ~/exemplo/consulta_exemplo.py '+T('--por-categoria','--by-category')],['resultado','terminal',T('categoria A: 2','category A: 2'),3],
+    ['resposta','',T('Os números batem; vou redigir a resposta.','The numbers match; drafting the answer.')],['final','',T('Total de registros de exemplo: 3 (A: 2, B: 1).','Sample records in total: 3 (A: 2, B: 1).')]];
+  const n=run?Math.min(P.length-1,2+Math.floor(Date.now()/4000)%(P.length-2)):P.length, t0=Date.now()/1000-n*4;
+  const ev=P.slice(0,n).map(([k,tool,txt,nl],i)=>({k,tool,txt,n:nl,el:i*4,t:new Date((t0+i*4)*1000).toTimeString().slice(0,8)}));
+  return {agent:id,live:run,modo:'vivo',total:ev.length,events:ev,sessao:'demo'};
+}
+function vivoRender(a){
+  const bd=$('vivobd'); if(!bd)return;
+  const k=JSON.stringify(a); if(k===VIVOK)return; VIVOK=k;
+  const noFim=bd.scrollHeight-bd.scrollTop-bd.clientHeight<40;      // quem rolou para cima para ler não é puxado para baixo
+  let m='';
+  if(a.erro){$('vivost').textContent='';$('vivometa').innerHTML='<span class="warn">'+esc(EN&&a.erro_en||a.erro)+'</span>';bd.innerHTML='';return}
+  $('vivost').textContent=a.live?T('EM EXECUÇÃO','RUNNING'):T('ÚLTIMA EXECUÇÃO','LAST RUN');
+  $('vivost').className=a.live?'run':'';
+  m=a.total+' '+T('linhas','lines')+(a.total>a.events.length?' · '+T('mostrando as últimas ','showing the last ')+a.events.length:'')+(a.sessao?'':' · '+T('sem sessão encontrada','no session found'));
+  if(a.parado_ha_s>=120)m+=' · <span class="warn">'+T('sem ação há '+Math.round(a.parado_ha_s/60)+' min (ferramenta demorando?)','no activity for '+Math.round(a.parado_ha_s/60)+' min (slow tool?)')+'</span>';
+  $('vivometa').innerHTML=m;
+  bd.innerHTML=a.events.map(vivoLinha).join('')||'<div class="meta">'+T('Nenhuma ação registrada.','No actions recorded.')+'</div>';
+  if(noFim)bd.scrollTop=bd.scrollHeight;
+}
+async function atualizarVivo(){
+  if(!VIVO)return; const id=VIVO;
+  try{const a=DEMO?vivoDemo(id):await (await fetch('/api/atividade?modo=vivo&agent='+encodeURIComponent(id),{cache:'no-store'})).json();
+    if(VIVO===id)vivoRender(a)}catch(e){}
+}
+function vivoPosicionar(){const p=$('vivo'),h=document.querySelector('header');if(p)p.style.top=Math.max(0,h?h.getBoundingClientRect().bottom:0)+'px'}
+function abrirVivo(id){
+  const it=all().find(i=>i.id===id); if(!it||it.kind!=='agent')return false;
+  let p=$('vivo');
+  if(!p){p=document.createElement('div');p.id='vivo';p.setAttribute('role','complementary');
+    p.innerHTML='<div class="hd"><b id="vivott"></b><span id="vivost"></span><button id="vivox" title="'+T('Fechar (Esc)','Close (Esc)')+'" aria-label="'+T('Fechar','Close')+'">×</button></div><div class="meta" id="vivometa"></div><div class="bd" id="vivobd" aria-live="off"></div><div class="ft">'+T('Ao vivo: raciocínio, respostas e comandos completos; do resultado, só o começo. app_key mascarada, pasta pessoal como ~, nomes e e-mails omitidos quando o pedido não pede lista. Vínculo aproximado (modelo + horário).','Live: full reasoning, replies and commands; only the start of each result. app_key masked, home folder as ~, names and e-mails left out unless the request asks for a list. Approximate match (model + time).')+'</div>';
+    document.body.appendChild(p);$('vivox').addEventListener('click',fecharVivo)}
+  p.setAttribute('aria-label',T('Atividade ao vivo de ','Live activity of ')+label(id));
+  $('vivott').textContent=label(id).toUpperCase(); $('vivobd').innerHTML='<div class="meta">'+T('carregando…','loading…')+'</div>'; $('vivometa').textContent=''; $('vivost').textContent='';
+  VIVOK=''; p.style.display='flex'; vivoPosicionar();
+  VIVO=id; clearInterval(VIVOT); atualizarVivo(); VIVOT=setInterval(atualizarVivo,1500); return true;
+}
+function fecharVivo(){const p=$('vivo'); if(p)p.style.display='none'; VIVO=null; clearInterval(VIVOT)}
+function atividadeTrocar(){const id=VIVO||POP; if(!id)return; fecharVivo(); fecharPop(); abrirAtividade(id,innerWidth/2,innerHeight/3)}
+function abrirAtividade(id,x,y){if(CFG.atividade==='vivo'){fecharPop();abrirVivo(id)}else{fecharVivo();abrirPop(id,x,y)}}
+addEventListener('resize',vivoPosicionar);
 document.addEventListener('click',e=>{
   const g=e.target.closest&&e.target.closest('.st,.wk');
-  if(g&&g.dataset.id){abrirPop(g.dataset.id,e.clientX,e.clientY)}
-  else if(!e.target.closest('#pop')) fecharPop();
+  if(g&&g.dataset.id){abrirAtividade(g.dataset.id,e.clientX,e.clientY)}
+  else if(!e.target.closest('#pop')) fecharPop();          // o painel ao vivo não fecha com clique fora: não é modal
 });
-document.addEventListener('keydown',e=>{if(e.key==='Escape')fecharPop()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){fecharPop();fecharVivo()}});
+if(QS.get('vivo'))setTimeout(function abrirQuandoMontar(){if(!built)return setTimeout(abrirQuandoMontar,200);abrirVivo(QS.get('vivo'))},0);   // ?vivo=<agente>: abre o painel (capturas e testes)

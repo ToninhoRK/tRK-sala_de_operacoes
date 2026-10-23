@@ -68,5 +68,5 @@ function limparSel(){SEL=null;document.querySelectorAll('.st.selected').forEach(
   });
   let v=QS.has('jobs')?'jobs':QS.has('lista')?'lista':null;
   if(!v){try{v=localStorage.getItem('sala_visao')||(localStorage.getItem('sala_lista')==='1'?'lista':null)}catch(e){}}   // sala_lista: versões antes da tela JOBS
-  if(v&&v!=='office')setTimeout(()=>visaoLigar(v),0);      // depois do jobs.js carregar
+  if(v&&v!=='office'){const f=()=>visaoLigar(v);document.readyState==='loading'?document.addEventListener('DOMContentLoaded',f):setTimeout(f,0)}   // depois de TODOS os scripts (setTimeout 0 sozinho podia rodar antes do jobs.js: renderJobs is not defined, 23/10/2026)
 })();

@@ -135,6 +135,25 @@ aside#lateral>#detail.mais{-webkit-mask-image:linear-gradient(#000 calc(100% - 4
 #pop .hd button{background:none;border:0;color:var(--muted);cursor:pointer;font:inherit;font-size:14px;line-height:1}
 #pop .bd{padding:6px 10px 8px;max-height:260px;overflow:auto}
 #pop .ln{display:flex;gap:10px;padding:2px 0;color:var(--text)} #pop .ln span:first-child{color:var(--dim)}
+/* painel AO VIVO (principal.js): largo, à direita, abaixo do cabeçalho; não é modal (a Sala continua clicável) */
+#vivo{position:fixed;right:0;bottom:0;top:0;z-index:48;width:min(640px,96vw);display:none;flex-direction:column;background:var(--panel);border-left:1px solid var(--line2);box-shadow:-12px 0 30px #0009;font-family:var(--mono);font-size:12px}
+#vivo .hd{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);letter-spacing:.08em}
+#vivo .hd b{flex:1;min-width:0;font-weight:600;color:var(--text);overflow-wrap:anywhere}
+#vivo #vivost{color:var(--muted);font-size:11px} #vivo #vivost.run{color:var(--cyan)}
+#vivo .hd button{background:none;border:0;color:var(--muted);cursor:pointer;font:inherit;font-size:18px;line-height:1}
+#vivo .hd button:hover{color:var(--text)}
+#vivo>.meta{color:var(--muted);padding:6px 14px;border-bottom:1px solid var(--line);font-size:11px} #vivo .warn{color:var(--amber)}
+#vivo .bd{flex:1;min-height:0;overflow:auto;padding:6px 0;scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+#vivo .bd>.meta{color:var(--muted);padding:6px 14px}
+#vivo .vl{display:grid;grid-template-columns:118px 20px minmax(0,1fr);gap:8px;padding:5px 14px;border-bottom:1px solid #ffffff08;line-height:1.45}
+#vivo .vt{color:var(--dim);white-space:nowrap} #vivo .vt i{font-style:normal;margin-left:8px;color:var(--muted)}
+#vivo .vx{min-width:0;overflow-wrap:anywhere;color:var(--text)} #vivo .vx b{font-weight:600;margin-right:8px}
+#vivo .vx span{color:#c4cdd6;white-space:pre-wrap;display:block;margin-top:2px}
+#vivo .k-raciocinio .vx span{color:#9fb0bf;font-style:italic}
+#vivo .k-cmd .vx b{color:var(--cyan)} #vivo .k-cmd .vx span{color:var(--text)}
+#vivo .k-final .vx b{color:var(--green,#3ddc84)}
+#vivo .vl:last-child{background:#2bd4f20d}
+#vivo .ft{color:var(--muted);padding:8px 14px;border-top:1px solid var(--line);font-size:10.5px;line-height:1.45}
 #pop .ln.last{color:var(--cyan)} #pop .meta{color:var(--muted);padding:2px 0 6px} #pop .warn{color:var(--amber)}
 
 /* ---- menu CONFIGURAR ---- */

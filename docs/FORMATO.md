@@ -131,6 +131,14 @@ A partir da versão 4 do `/api/state`, cada job traz `agenda_texto`, `proximas` 
 de cada item de `saude` (o e-mail do vigia usa `msg`) e `erro`/`erro_en` no `/api/atividade`. Nomes e descrições do
 `agentes.json` e do `layout.json` são dados e aparecem como foram escritos.
 
+**`/api/atividade?agent=<id>[&modo=vivo]`** (o que o agente está fazendo; lido do `state.db` do Hermes, vínculo aproximado
+por modelo + horário). Sem `modo` (opção "Resumida"): `events` = `[{"t": "HH:MM:SS", "tool": "<ferramenta>"}]`, as últimas 15.
+Com `modo=vivo` (padrão da página): as últimas 150 linhas `{"t", "el" (segundos desde o início), "k", "txt"[, "tool", "n"]}`,
+com `k` = `raciocinio`, `resposta` (resposta com chamada de ferramenta), `final` (resposta final), `cmd` (comando ou caminho
+do arquivo) — esses quatro com o texto completo, até 20 000 caracteres — ou `resultado` (`n` linhas; `txt` = começo da 1ª,
+140 caracteres). Cortes de segurança: `app_key` mascarada, pasta pessoal como `~`, linhas com nomes/e-mails omitidas do
+resultado se o pedido não pede lista. Os dois modos trazem `live`, `modo`, `total` e `sessao` (e `parado_ha_s` quando a sessão foi achada).
+
 ## Salas e nomes: `layout.json`
 
 - `setores`: lista de salas na ordem em que aparecem (`id`, `titulo`, `linha` `cima` ou `baixo`, `agentes`, `prefixos`,

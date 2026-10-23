@@ -80,6 +80,37 @@ function painelBotaoAutoteste(){
   try{if(guardado===null)localStorage.removeItem('sala_lateral');else localStorage.setItem('sala_lateral',guardado)}catch(e){}
   return r;
 }
+// Painel AO VIVO (23/10/2026): abre ao lado, abaixo do cabeçalho, sem passar da tela; mostra os 5 tipos de linha; escapa HTML;
+// texto comprido quebra sem rolar para o lado; clicar noutro lugar NÃO fecha (não é modal); × fecha; na opção "Resumida" o
+// clique abre a caixinha antiga e não o painel. Volta a opção do usuário no fim.
+function vivoAutoteste(){
+  const ags=all().filter(i=>i.kind==='agent'); if(!ags.length)return [];
+  const r=[], antes=CFG.atividade, P=m=>r.push('AO VIVO: '+m);
+  CFG.atividade='vivo';
+  try{
+    if(!abrirVivo(ags[0].id)){P('o painel não abriu');return r}
+    const p=$('vivo'), hb=document.querySelector('header').getBoundingClientRect().bottom, b=p.getBoundingClientRect();
+    if(getComputedStyle(p).display!=='flex')P('painel não visível');
+    if(b.top<hb-1)P('painel cobre o cabeçalho ('+b.top.toFixed(0)+' < '+hb.toFixed(0)+')');
+    if(b.right>innerWidth+1||b.width>innerWidth)P('painel passa da tela');
+    const longo='x'.repeat(900), ev=[{k:'raciocinio',t:'10:00:00',el:0,txt:'pensando '+longo},{k:'cmd',t:'10:00:01',el:1,tool:'terminal',txt:'python3 ~/x.py <img src=x onerror="window.__xssvivo=1">'},
+      {k:'resultado',t:'10:00:02',el:2,tool:'terminal',n:3,txt:'ok'},{k:'resposta',t:'10:00:03',el:3,txt:'vou responder'},{k:'final',t:'10:00:04',el:4,txt:'Total: 3'}];
+    vivoRender({agent:ags[0].id,live:true,modo:'vivo',total:5,events:ev,sessao:'teste'});
+    const bd=$('vivobd');
+    if(bd.querySelectorAll('.vl').length!==5)P('esperava 5 linhas, vieram '+bd.querySelectorAll('.vl').length);
+    ['raciocinio','cmd','resultado','resposta','final'].forEach(k=>{if(!bd.querySelector('.k-'+k))P('sem linha do tipo '+k)});
+    if(bd.querySelector('img')||window.__xssvivo)P('HTML do agente foi interpretado (falta esc)');
+    if(bd.scrollWidth>bd.clientWidth+1)P('texto comprido rola para o lado ('+bd.scrollWidth+' > '+bd.clientWidth+')');
+    document.querySelector('.stage').dispatchEvent(new MouseEvent('click',{bubbles:true}));
+    if(!VIVO||getComputedStyle(p).display==='none')P('fechou com clique fora (não devia: não é modal)');
+    if(ags[1]){const g=document.querySelector('.st[data-id="'+CSS.escape(ags[1].id)+'"]');if(g){g.dispatchEvent(new MouseEvent('click',{bubbles:true}));if(VIVO!==ags[1].id)P('clicar noutro agente não trocou o painel')}}
+    $('vivox').click(); if(VIVO||getComputedStyle(p).display!=='none')P('o × não fechou');
+    CFG.atividade='resumo'; abrirAtividade(ags[0].id,100,100);
+    if(VIVO||getComputedStyle(p).display!=='none')P('na opção Resumida abriu o painel ao vivo');
+    if(!$('pop')||$('pop').style.display!=='block')P('na opção Resumida a caixinha não abriu');
+  }finally{fecharPop();fecharVivo();CFG.atividade=antes}
+  return r;
+}
 // Filtro da atividade recente: clicar em SÓ EXCEÇÕES deixa só exceções (nenhum ponto verde de OK) e marca o botão; TUDO volta a lista inteira.
 function feedAutoteste(){
   const bE=document.querySelector('#feedf button[data-f="excecoes"]'), bT=document.querySelector('#feedf button[data-f="tudo"]'), fw=document.getElementById('feedwrap');
@@ -154,6 +185,7 @@ function debugReport(){
   jobsAutoteste().forEach(errPush);
   csvAutoteste().forEach(errPush);
   feedAutoteste().forEach(errPush);
+  vivoAutoteste().forEach(errPush);
   lateralAutoteste().forEach(errPush);
   painelBotaoAutoteste().forEach(errPush);
   const R=(b,k,id,t)=>({k,x:b.x,y:b.y,w:b.width,h:b.height,id,t});
