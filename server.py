@@ -751,8 +751,10 @@ def jarvis_estado():
     try:
         con = sqlite3.connect("file:%s?mode=ro" % STATE_DB, uri=True, timeout=3)
         marcas = ",".join("?" * len(FONTES_NAO_INTERATIVAS))
-        rows = con.execute("select id, source, model, started_at from sessions where source not in (%s) "
-                           "order by started_at desc limit 15" % marcas, FONTES_NAO_INTERATIVAS).fetchall()
+        # ordena pela ÚLTIMA MENSAGEM (não pelo início): conversa longa e antiga continua sendo vista como ativa
+        rows = con.execute("select s.id, s.source, s.model, s.started_at from sessions s where s.source not in (%s) "
+                           "order by coalesce((select max(m.timestamp) from messages m where m.session_id = s.id), s.started_at) desc limit 15" % marcas,
+                           FONTES_NAO_INTERATIVAS).fetchall()
         agora = time.time()
         melhor = None
         for sid, src, modelo, _ini in rows:
