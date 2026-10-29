@@ -6,5 +6,6 @@
   "vault_path": "~/caminho/do/seu/vault",
   "responsavel_padrao": "Seu Nome",
   "verificar_atualizacao": true,
+  "skills_prefixo_setor": "meu-",
   "alerta_email": {"para": "voce@exemplo.com", "de": "sala@exemplo.com", "conta_himalaya": "nome-da-conta-no-himalaya"}
 }

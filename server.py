@@ -971,6 +971,35 @@ def equipe_painel():
                "desc": "Mesa ilustrativa da equipe (sem dados)."} for i in (2, 3)]
     return [estacao] + ilustr, resumo
 
+_SK = {"t": 0.0, "chave": None, "v": None}
+
+
+def skills_contagem():
+    """Skills instaladas no Hermes (SKILL.md em ~/.hermes/skills). So numeros, somente leitura. Se o sala_config.json
+    tiver "skills_prefixo_setor" (ex.: o prefixo das suas skills proprias), conta tambem quantas comecam com ele
+    ("setor"); sem a chave, "setor" fica None. Cache de 60 s: o /api/state atualiza a cada segundo e nao deve varrer o disco."""
+    pasta = os.path.join(HERMES, "skills")
+    try:
+        prefixo = str(ler_json(CONFIG).get("skills_prefixo_setor") or "")
+    except Exception:
+        prefixo = ""
+    chave = (pasta, prefixo)
+    if _SK["v"] is not None and _SK["chave"] == chave and time.time() - _SK["t"] < 60:
+        return _SK["v"]
+    total = setor = 0
+    try:
+        for raiz, dirs, arqs in os.walk(pasta):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            if "SKILL.md" in arqs:
+                total += 1
+                if prefixo and os.path.basename(raiz).startswith(prefixo):
+                    setor += 1
+    except OSError:
+        return None
+    _SK.update(t=time.time(), chave=chave, v={"total": total, "setor": setor if prefixo else None})
+    return _SK["v"]
+
+
 def vault_painel():
     """Placa da DIRETORIA: total de notas do vault, variação (hoje e semana) e resultado da última conferência da auditoria. So numeros; somente leitura."""
     try:
@@ -986,7 +1015,7 @@ def vault_painel():
     out = {"total": total, "age_s": int(agora - (j.get("updated_at") or agora)),
            "por_tipo": dict(sorted((j.get("por_tipo") or {}).items(), key=lambda x: -x[1])[:6]),
            "delta_hoje": (total - hist[antes[-1]]) if (antes and total is not None) else None,
-           "delta_semana": None, "dias_semana": None, "auditoria": None}
+           "delta_semana": None, "dias_semana": None, "auditoria": None, "skills": skills_contagem()}
     if antes and total is not None:
         alvo = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
         ate = [d for d in antes if d <= alvo]

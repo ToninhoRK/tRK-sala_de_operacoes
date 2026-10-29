@@ -223,7 +223,7 @@ function renderTV(){
     :'<div class="calmo">'+T('Agentes em ordem<br><span>nenhum agente rodando, com falha ou atrasado</span>','All agents in order<br><span>no agent running, failed or late</span>')+'</div>';
   const e=STATE.equipe, v=STATE.vault; let r='';
   if(e)r+=`<div><label>${T('Equipe · chamados','Team · tickets')}</label><b>${f(e.abertos_total)}</b> ${T('em aberto','open')} · <b class="${e.sem_responsavel>0?'a':''}">${f(e.sem_responsavel)}</b> ${T('sem responsável','unassigned')}${e.vencidos!=null?` · <b class="${e.vencidos>0?'a':''}">${e.vencidos}</b> ${T('vencidos','overdue')}`:''}</div>`;
-  if(v&&v.total!=null)r+=`<div><label>Vault</label><b>${v.total.toLocaleString(LOCALE)}</b> ${T('notas · auditoria','notes · audit')} <b class="${v.auditoria&&v.auditoria.divergencias?'r':''}">${!v.auditoria?'—':v.auditoria.divergencias?v.auditoria.divergencias+T(' diverg.',' mismatch.'):'OK'}</b></div>`;
+  if(v&&v.total!=null)r+=`<div><label>Vault</label><b>${v.total.toLocaleString(LOCALE)}</b> ${T('notas · skills','notes · skills')} <b>${v.skills&&v.skills.total!=null?v.skills.total.toLocaleString(LOCALE):'—'}</b></div>`;
   $('tvrodape').innerHTML=r?'<h3>'+T('Equipe e vault','Team and vault')+'</h3>'+r:'';
 }
 function setLive(ok){const p=$('live');p.classList.toggle('off',!ok);p.querySelector('span').textContent=ok?T('AO VIVO','LIVE'):T('SEM CONEXÃO','OFFLINE')}
@@ -247,7 +247,7 @@ function demo(s){
           cr&&{ts:f(35),agent:cr.id,type:'cron',code:0,dur:292}].filter(Boolean).concat(s.feed).slice(0,40);
   if(s.jarvis){const jq=QS.get('jarvis'),jr=jq==='running'||jq==='aguardando';s.jarvis.status=jr?'running':'ok';s.jarvis.active_sessions=jr?1:0;s.jarvis.aguardando=jq==='aguardando';s.jarvis.aguardando_s=jq==='aguardando'?140:null}   // ?jarvis=aguardando: pergunta esperando você
   s.claude_usage={updated_at:0,age_s:120,five_hour:{pct:34,resets_at:Math.floor(Date.now()/1000)+9000,reset_passou:false},seven_day:{pct:78,resets_at:Math.floor(Date.now()/1000)+250000,reset_passou:false}};
-  s.vault={total:900,age_s:60,por_tipo:{'tipo-a':349,'tipo-b':227,'tipo-c':151,'(sem tipo)':26,'tipo-d':24,'tipo-e':14},delta_hoje:7,delta_semana:31,dias_semana:7,auditoria:{divergencias:0,age_s:300,categorias:{}}};
+  s.vault={total:900,age_s:60,por_tipo:{'tipo-a':349,'tipo-b':227,'tipo-c':151,'(sem tipo)':26,'tipo-d':24,'tipo-e':14},delta_hoje:7,delta_semana:31,dias_semana:7,auditoria:{divergencias:0,age_s:300,categorias:{}},skills:{total:650,setor:21}};
   // demonstração: período, consumo e equipe simulados (determinísticos, para as capturas; com 7 dias, os mesmos números de antes)
   const P=s.periodo_dias||7, dd=i=>{const d=new Date(Date.now()-(P-1-i)*864e5);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}, B7=[9,12,0,0,11,15,14], F7=[0,1,0,0,0,2,1], m7=i=>((i-(P-7))%7+7)%7;
   if(QS.has('manut')&&rel){const d=new Date(Date.now()+2*864e5);rel.status='manut';rel.status_real='error';rel.antigo=false;rel.manutencao={ate:d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' 18:00',motivo:T('troca de credencial (exemplo)','credential rotation (example)')}}   // ?demo=1&manut=1

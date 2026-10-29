@@ -525,6 +525,32 @@ class Indicadores(Base):
         self.assertEqual(r, {"consulta_a": "Pessoa B", "consulta_b": "Pessoa A", "cron:rotina": "Pessoa A"})
 
 
+class Skills(Base):
+    """Contagem de skills da placa do vault (29/10/2026): conta SKILL.md, ignora pastas ocultas, prefixo do setor opcional."""
+
+    def monta(self, config):
+        raiz = os.path.join(self.tmp, "hermes_fake")
+        for p in ("a", "grupo/x-um", "x-dois", ".oculta/y"):
+            os.makedirs(os.path.join(raiz, "skills", p))
+            open(os.path.join(raiz, "skills", p, "SKILL.md"), "w").write("---\nname: t\n---\n")
+        os.makedirs(os.path.join(raiz, "skills", "sem-skill"))
+        if config is not None:
+            json.dump(config, open(server.CONFIG, "w"))
+        antigo, server.HERMES = server.HERMES, raiz
+        server._SK.update(t=0.0, chave=None, v=None)
+        try:
+            return server.skills_contagem()
+        finally:
+            server.HERMES = antigo
+            server._SK.update(t=0.0, chave=None, v=None)
+
+    def test_conta_e_ignora_ocultas_com_prefixo(self):
+        self.assertEqual(self.monta({"skills_prefixo_setor": "x-"}), {"total": 3, "setor": 2})
+
+    def test_sem_prefixo_o_setor_fica_vazio(self):
+        self.assertEqual(self.monta(None), {"total": 3, "setor": None})
+
+
 class Vigia(Base):
     """vigia_sala.py: histórico próprio dos jobs e alerta por e-mail (himalaya falso, nada real é lido nem enviado)."""
 

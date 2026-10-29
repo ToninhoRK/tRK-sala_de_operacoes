@@ -12,7 +12,7 @@ catálogo: o que faltar simplesmente não aparece.
 | `~/.hermes/cron/jobs.json` | rotinas agendadas e o próximo horário de cada uma (atraso) | não |
 | `layout.json` (pasta da sala) | salas, quem senta onde e nomes amigáveis | já vem pronto |
 | `~/.hermes/data/equipe_agidesk.json` | totais da fila da equipe | não |
-| `~/.hermes/data/vault_contagem.json` | painel do vault (notas e auditoria) | não |
+| `~/.hermes/data/vault_contagem.json` | painel do vault (notas; o campo `auditoria` continua no arquivo, mas a placa mostra a contagem de skills) | não |
 | `~/.hermes/data/claude_uso.json` | uso do plano do Claude | não |
 
 Os caminhos de `agentes.json` e `jobs.json` podem ser trocados pelas variáveis de ambiente `SALA_AGENTES` e `SALA_JOBS`

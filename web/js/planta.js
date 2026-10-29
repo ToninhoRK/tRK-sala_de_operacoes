@@ -197,7 +197,7 @@ function zoomZone(id){
    O texto segue a parede com matrix(1,-.5,0,1) a partir da ponta da frente (maior y), para ler da esquerda para a direita. */
 function vaultWall(z,ya,W){
   // parede da esquerda, na altura do canto de convivência (acima dos sofás, até a cafeteira): ali não há mesa, selo nem boneco na frente.
-  // Compacto (W<120, DIRETORIA rasa): só total e auditoria; as variações ficam no tooltip.
+  // Compacto (W<120, DIRETORIA rasa): só total de notas e contagem de skills; as variações ficam no tooltip.
   const x0=z.x, F='font-family="ui-monospace,Menlo,Consolas,monospace"', C=W<120;
   wallDecor(z,'left',ya,W/S,6,65,a=>{const o=P(x0,a+W/S,0);return `<g transform="matrix(1,-.5,0,1,${o[0]},${o[1]})"><title data-v="t">${T('notas do vault','vault notes')}</title>
     <rect x="0" y="-65" width="${W}" height="59" rx="2.5" fill="#0A1118" stroke="#2A4458"/>
@@ -206,9 +206,9 @@ function vaultWall(z,ya,W){
     <text data-v="d1" x="${W-7}" y="-41" text-anchor="end" ${F} font-size="11.5" font-weight="700" fill="#2BD4F2"></text>
     <text data-v="d2" x="${W-7}" y="-29" text-anchor="end" ${F} font-size="10" fill="#8FB0C4"></text>`)+`
     <line x1="5" y1="-23" x2="${W-5}" y2="-23" stroke="#2A4458" stroke-width=".7"/>
-    <text x="7" y="-11" ${F} font-size="${C?7.5:9}" fill="#8FB0C4" letter-spacing=".4">${C?'AUDIT.':T('AUDITORIA','AUDIT')}</text>
-    <circle data-v="led" cx="${C?40:70}" cy="-14.2" r="4.2" fill="#566A7B"/>
-    <text data-v="a" x="${C?48:79}" y="-10.4" ${F} font-size="${C?10:11.5}" font-weight="700" fill="#9FB4C4">—</text>
+    <text x="7" y="-11" ${F} font-size="${C?7.5:9}" fill="#8FB0C4" letter-spacing=".4">SKILLS</text>
+    <circle data-v="led" cx="${C?46:70}" cy="-14.2" r="4.2" fill="#566A7B"/>
+    <text data-v="a" x="${C?54:79}" y="-10.4" ${F} font-size="${C?10:11.5}" font-weight="700" fill="#9FB4C4">—</text>
     </g>`},'painel');
 }
 /* SALA GOVERNANÇA (equipe do Agidesk): painel na parede dos fundos, logo abaixo da placa, com os totais da equipe. Só números; textos atualizados por renderEquipe(). */
@@ -240,13 +240,14 @@ function renderVault(s){
   const sg=x=>(x>0?'+':x<0?'−':'±')+Math.abs(x);
   if(v.delta_hoje==null){V('d1','');V('d2',T('desde hoje','since today'))}
   else{V('d1',sg(v.delta_hoje)+T(' hoje',' today'));V('d2',sg(v.delta_semana)+(v.dias_semana>=7?T(' em 7 dias',' in 7 days'):T(' em ',' in ')+v.dias_semana+' d'))}
-  const au=v.auditoria, vel=au&&au.age_s>5400;
-  if(!au){V('led',null,'#566A7B');V('a','—','#9FB4C4')}
-  else if(au.divergencias===0){V('led',null,vel?'#566A7B':'#46BE72');V('a','OK'+(vel?T(' (antiga)',' (old)'):''),vel?'#9FB4C4':'#8FE0AE')}
-  else{V('led',null,vel?'#566A7B':'#EF4444');V('a',au.divergencias+T(' DIVERG.',' MISMATCH')+(vel?T(' (antiga)',' (old)'):''),vel?'#9FB4C4':'#F2B8B8')}
+  // Skills instaladas no Hermes (SKILL.md em ~/.hermes/skills): contagem, não alerta. O curator do Hermes mexe nas skills
+  // por conta própria, então "divergência entre vaults" nunca zera e não serve de sinal nesta placa.
+  const sk=v.skills;
+  if(!sk||sk.total==null){V('led',null,'#566A7B');V('a','—','#9FB4C4')}
+  else{V('led',null,'#2BD4F2');V('a',sk.total.toLocaleString(LOCALE),'#9FE8F8')}
   const ha=x=>x<90?T('instantes','a moment'):Math.round(x/60)+' min';
   V('t',T('Notas no vault: ','Notes in the vault: ')+v.total.toLocaleString(LOCALE)+T(' (contagem de '+ha(v.age_s)+' atrás). Por tipo: ',' (counted '+ha(v.age_s)+' ago). By type: ')+Object.entries(v.por_tipo||{}).map(([k,x])=>k+' '+x).join(' · ')
-    +(au?T('. Auditoria conferida há '+ha(au.age_s)+': ','. Audit checked '+ha(au.age_s)+' ago: ')+(au.divergencias===0?T('nenhuma divergência','no mismatches'):au.divergencias+T(' divergência(s) (',' mismatch(es) (')+Object.entries(au.categorias||{}).map(([k,x])=>k+' '+x).join(', ')+')'):''));
+    +(sk&&sk.total!=null?T('. Skills instaladas no Hermes: ','. Skills installed in Hermes: ')+sk.total.toLocaleString(LOCALE)+(sk.setor?T(' (do setor: ',' (department: ')+sk.setor+')':''):''));
 }
 
 /* adereços fixos da sala: estantes, impressora, planta */

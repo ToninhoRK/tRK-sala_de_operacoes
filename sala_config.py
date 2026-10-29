@@ -9,6 +9,7 @@ Chaves usadas:
   vault_path                 pasta do vault do Obsidian a contar (placa da DIRETORIA)
   responsavel_padrao         (opcional) responsável de toda estação sem "responsavel" no agentes.json (server.py)
   alerta_email               (opcional) {"para": um endereço só, "de", "conta_himalaya"}: e-mail do vigia_sala.py
+  skills_prefixo_setor       (opcional) prefixo das suas skills próprias (ex.: "meu-"): a placa do vault mostra quantas skills têm esse prefixo no tooltip
 """
 import os, sys, json
 
