@@ -198,17 +198,18 @@ function zoomZone(id){
 function vaultWall(z,ya,W){
   // parede da esquerda, na altura do canto de convivência (acima dos sofás, até a cafeteira): ali não há mesa, selo nem boneco na frente.
   // Compacto (W<120, DIRETORIA rasa): só total de notas e contagem de skills; as variações ficam no tooltip.
+  // Normal: o total ocupa a linha inteira (com 4+ dígitos não cabia ao lado das variações); as variações ficam numa linha própria, abaixo.
   const x0=z.x, F='font-family="ui-monospace,Menlo,Consolas,monospace"', C=W<120;
   wallDecor(z,'left',ya,W/S,6,65,a=>{const o=P(x0,a+W/S,0);return `<g transform="matrix(1,-.5,0,1,${o[0]},${o[1]})"><title data-v="t">${T('notas do vault','vault notes')}</title>
     <rect x="0" y="-65" width="${W}" height="59" rx="2.5" fill="#0A1118" stroke="#2A4458"/>
-    <text x="7" y="-54" ${F} font-size="${C?8:9}" fill="#8FB0C4" letter-spacing=".4">${C?T('NOTAS · VAULT','VAULT · NOTES'):T('NOTAS NO VAULT','NOTES IN VAULT')}</text>
-    <text data-v="n" x="7" y="-29" ${F} font-size="${C?24:28}" font-weight="700" fill="#E6F4FA">—</text>`+(C?'':`
-    <text data-v="d1" x="${W-7}" y="-41" text-anchor="end" ${F} font-size="11.5" font-weight="700" fill="#2BD4F2"></text>
-    <text data-v="d2" x="${W-7}" y="-29" text-anchor="end" ${F} font-size="10" fill="#8FB0C4"></text>`)+`
-    <line x1="5" y1="-23" x2="${W-5}" y2="-23" stroke="#2A4458" stroke-width=".7"/>
-    <text x="7" y="-11" ${F} font-size="${C?7.5:9}" fill="#8FB0C4" letter-spacing=".4">SKILLS</text>
-    <circle data-v="led" cx="${C?46:70}" cy="-14.2" r="4.2" fill="#566A7B"/>
-    <text data-v="a" x="${C?54:79}" y="-10.4" ${F} font-size="${C?10:11.5}" font-weight="700" fill="#9FB4C4">—</text>
+    <text x="7" y="${C?-54:-56}" ${F} font-size="${C?8:8.5}" fill="#8FB0C4" letter-spacing=".4">${C?T('NOTAS · VAULT','VAULT · NOTES'):T('NOTAS NO VAULT','NOTES IN VAULT')}</text>
+    <text data-v="n" x="7" y="${C?-29:-34.5}" ${F} font-size="${C?24:22}" font-weight="700" fill="#E6F4FA">—</text>`+(C?'':`
+    <text data-v="d1" data-w="${W}" x="7" y="-22" ${F} font-size="10" font-weight="700" fill="#2BD4F2"></text>
+    <text data-v="d2" x="${W-7}" y="-22" text-anchor="end" ${F} font-size="9" fill="#8FB0C4"></text>`)+`
+    <line x1="5" y1="${C?-23:-16.5}" x2="${W-5}" y2="${C?-23:-16.5}" stroke="#2A4458" stroke-width=".7"/>
+    <text x="7" y="${C?-11:-8}" ${F} font-size="${C?7.5:9}" fill="#8FB0C4" letter-spacing=".4">SKILLS</text>
+    <circle data-v="led" cx="${C?46:70}" cy="${C?-14.2:-11.4}" r="4.2" fill="#566A7B"/>
+    <text data-v="a" x="${C?54:79}" y="${C?-10.4:-7.6}" ${F} font-size="${C?10:10.5}" font-weight="700" fill="#9FB4C4">—</text>
     </g>`},'painel');
 }
 /* SALA GOVERNANÇA (equipe do Agidesk): painel na parede dos fundos, logo abaixo da placa, com os totais da equipe. Só números; textos atualizados por renderEquipe(). */
@@ -237,9 +238,17 @@ function renderVault(s){
   const v=s.vault||null, V=(k,t,c)=>setD('data-v',k,t,c);
   if(!v||v.total==null){V('n','—');V('d1','');V('d2',T('aguardando contagem','waiting for the count'));V('led',null,'#566A7B');V('a','—');return}
   V('n',v.total.toLocaleString(LOCALE));
-  const sg=x=>(x>0?'+':x<0?'−':'±')+Math.abs(x);
+  const sg=x=>(x>0?'+':x<0?'−':'±')+Math.abs(x).toLocaleString(LOCALE);
   if(v.delta_hoje==null){V('d1','');V('d2',T('desde hoje','since today'))}
-  else{V('d1',sg(v.delta_hoje)+T(' hoje',' today'));V('d2',sg(v.delta_semana)+(v.dias_semana>=7?T(' em 7 dias',' in 7 days'):T(' em ',' in ')+v.dias_semana+' d'))}
+  else{
+    const dn=v.dias_semana>=7?7:v.dias_semana, a=sg(v.delta_hoje), b=sg(v.delta_semana);
+    // as duas variações dividem uma linha (largura W-14 do painel); número grande não cabe com as palavras inteiras: encurta aos poucos
+    const tentativas=[[a+T(' hoje',' today'),b+(v.dias_semana>=7?T(' em 7 dias',' in 7 days'):T(' em ',' in ')+dn+' d')],[a+T(' hoje',' today'),b+' / '+dn+' d'],[a,b+' / '+dn+' d']];
+    const d1=document.querySelector('[data-v="d1"]'), W=d1?+d1.getAttribute('data-w'):0;
+    for(const [x,y] of tentativas){V('d1',x);V('d2',y);
+      const e1=document.querySelector('[data-v="d1"]'),e2=document.querySelector('[data-v="d2"]');
+      if(!W||!e1||!e1.getComputedTextLength||e1.getComputedTextLength()+e2.getComputedTextLength()<=W-14-6)break}   // sem medida (tema sem layout) = fica a 1ª
+  }
   // Skills instaladas no Hermes (SKILL.md em ~/.hermes/skills): contagem, não alerta. O curator do Hermes mexe nas skills
   // por conta própria, então "divergência entre vaults" nunca zera e não serve de sinal nesta placa.
   const sk=v.skills;

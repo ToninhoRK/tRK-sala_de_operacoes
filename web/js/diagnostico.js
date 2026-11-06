@@ -197,6 +197,30 @@ function idiomaAutoteste(){
     if(m){const i=Math.max(0,m.index-30);ruins.add(s.slice(i,m.index+40).replace(/\s+/g,' ').trim())}});
   return [...ruins].slice(0,10).map(x=>'IDIOMA: texto em português na tela em inglês: «'+x+'»');
 }
+// Painel NOTAS NO VAULT (06/11/2026): com 4+ dígitos o total encostava nas variações (hoje/7 dias). Simula totais e variações grandes no
+// renderVault e confere, com a geometria real (caixa de cada texto: largura medida, altura pela linha de base e pelo corpo da fonte), que
+// nenhum texto do painel encosta noutro nem passa da borda. Volta o estado real no fim.
+function vaultAutoteste(){
+  const n=document.querySelector('[data-v="n"]'); if(!n||!STATE||!STATE.vault||STATE.vault.total==null)return [];
+  const g=n.parentNode, rect=g.querySelector('rect'); if(!rect||!rect.getClientRects().length)return [];   // planta escondida (modo LISTA/JOBS, que o localStorage lembra entre casos): sem layout não há o que medir
+  const rb=rect.getBBox(), r=[], real=STATE.vault;
+  const casos=[{total:904,delta_hoje:3,delta_semana:12,dias_semana:7},{total:1040,delta_hoje:51,delta_semana:51,dias_semana:7},{total:1440,delta_hoje:123,delta_semana:456,dias_semana:7},
+    {total:10440,delta_hoje:-1234,delta_semana:3456,dias_semana:7},{total:99999,delta_hoje:12,delta_semana:34,dias_semana:4},{total:1040,delta_hoje:null,delta_semana:null,dias_semana:null}];
+  const caixas=()=>[...g.querySelectorAll('text')].filter(e=>e.textContent.trim()).map(e=>{const b=e.getBBox(),fs=+e.getAttribute('font-size')||10,y=+e.getAttribute('y')||0;
+    return {t:e.textContent,x0:b.x,x1:b.x+b.width,y0:y-.73*fs,y1:y+(/[jpqgy,]/.test(e.textContent)?.22:.04)*fs}});
+  try{
+    for(const c of casos){
+      renderVault(Object.assign({},STATE,{vault:Object.assign({},real,c)}));
+      const A=caixas(), rot='VAULT (total '+c.total+', hoje '+c.delta_hoje+', semana '+c.delta_semana+'): ';
+      for(let i=0;i<A.length;i++){
+        const a=A[i];
+        if(a.x0<rb.x+1||a.x1>rb.x+rb.width-1||a.y0<rb.y+1||a.y1>rb.y+rb.height-1)r.push(rot+'«'+a.t+'» passa da borda do painel');
+        for(let k=i+1;k<A.length;k++){const b=A[k]; if(a.x0<b.x1&&b.x0<a.x1&&a.y0<b.y1&&b.y0<a.y1)r.push(rot+'«'+a.t+'» encosta em «'+b.t+'»')}
+      }
+    }
+  }finally{renderVault(STATE)}
+  return [...new Set(r)].slice(0,8);
+}
 function debugReport(){
   idiomaAutoteste().forEach(errPush);
   jobsAutoteste().forEach(errPush);
@@ -206,6 +230,7 @@ function debugReport(){
   aguardandoAutoteste().forEach(errPush);
   lateralAutoteste().forEach(errPush);
   painelBotaoAutoteste().forEach(errPush);
+  vaultAutoteste().forEach(errPush);
   const R=(b,k,id,t)=>({k,x:b.x,y:b.y,w:b.width,h:b.height,id,t});
   const A=[];
   document.querySelectorAll('.lb').forEach(g=>{const id=g.dataset.id;g.querySelectorAll('text').forEach(t=>A.push(R(t.getBBox(),'label '+id,id,'label')))});
