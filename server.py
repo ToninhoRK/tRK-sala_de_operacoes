@@ -406,7 +406,15 @@ def atraso_job(jb, rodando, agora=None):
     return int(agora - prox)
 
 
-JOBS_OCULTOS = {"govti-vault-contagem", "govti-equipe-agidesk"}   # jobs de apoio da própria Sala (contagem da placa da Diretoria; números da sala GOVERNANÇA): rodam a cada 5 min e não aparecem nem no feed
+def _jobs_ocultos():
+    """Nomes de jobs do cron que a Sala não mostra nem no feed: a chave opcional "jobs_ocultos" (lista) do sala_config.json. Servem para os jobs de apoio da própria
+    Sala (contagem da placa do vault, números da equipe), que rodam a cada poucos minutos. Sem a chave (ou sem o arquivo), nenhum job é ocultado."""
+    try:
+        lista = json.load(open(CONFIG, encoding="utf8")).get("jobs_ocultos") or []
+        return {str(x) for x in lista} if isinstance(lista, list) else set()
+    except Exception:
+        return set()
+JOBS_OCULTOS = _jobs_ocultos()
 
 def cron_hist_sala():
     """Execuções de jobs guardadas pela própria Sala (vigia_sala.py): {job_id: [execução, ...]}. Sem o arquivo = vazio."""
@@ -935,7 +943,7 @@ def claude_uso():
     return out if ("five_hour" in out or "seven_day" in out) else None
 
 VAULT_CONT = os.path.join(HERMES, "data", "vault_contagem.json")   # gravado por vault_contagem.py (LaunchAgent ai.hermes.vault-contagem)
-EQUIPE_JSON = os.environ.get("SALA_EQUIPE") or os.path.join(HERMES, "data", "equipe_agidesk.json")   # gravado por equipe_agidesk.py (job de cron oculto govti-equipe-agidesk, a cada 5 min)
+EQUIPE_JSON = os.environ.get("SALA_EQUIPE") or os.path.join(HERMES, "data", "equipe_agidesk.json")   # gravado por equipe_agidesk.py (job de cron de apoio, a cada 5 min; ver "jobs_ocultos" no sala_config.json)
 EQUIPE_VELHO_S = 900
 
 
@@ -952,8 +960,8 @@ def equipe_painel():
     age = int(time.time() - (j.get("updated_at") or 0))
     velho = age > EQUIPE_VELHO_S
     if velho:
-        problema("equipe", "números da equipe do Agidesk defasados (lidos há %d min; job govti-equipe-agidesk)" % (age // 60),
-                 "Agidesk team numbers are stale (read %d min ago; job govti-equipe-agidesk)" % (age // 60))
+        problema("equipe", "números da equipe do Agidesk defasados (lidos há %d min; o job de apoio da equipe parou?)" % (age // 60),
+                 "Agidesk team numbers are stale (read %d min ago; has the team support job stopped?)" % (age // 60))
     hoje_ok = j.get("dia") == datetime.now().strftime("%Y-%m-%d")
     enc = j.get("encerrados_hoje_total")
     if enc is None and isinstance(j.get("encerrados_hoje"), dict):     # arquivo do formato antigo (por pessoa): só a soma sai daqui
@@ -1008,8 +1016,8 @@ def vault_painel():
         return None
     agora = time.time(); hoje = datetime.now().strftime("%Y-%m-%d"); total = j.get("total")
     if agora - (j.get("updated_at") or agora) > 1800:
-        problema("vault", "contagem do vault defasada (há %d min; job govti-vault-contagem)" % ((agora - j.get("updated_at")) // 60),
-                 "vault count is stale (%d min old; job govti-vault-contagem)" % ((agora - j.get("updated_at")) // 60))
+        problema("vault", "contagem do vault defasada (há %d min; o job de contagem do vault parou?)" % ((agora - j.get("updated_at")) // 60),
+                 "vault count is stale (%d min old; has the vault count job stopped?)" % ((agora - j.get("updated_at")) // 60))
     hist = j.get("historico") or {}
     antes = sorted(d for d in hist if d < hoje)
     out = {"total": total, "age_s": int(agora - (j.get("updated_at") or agora)),

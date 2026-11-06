@@ -155,6 +155,7 @@ Sem o Hermes, funcionam igual: estação, estado, histórico, duração, falhas,
 - **Integrações:** a fila da equipe no Agidesk e a contagem de notas de um vault do Obsidian são configuradas num arquivo local (veja `config.exemplo.json`). A chave de acesso fica no Keychain do macOS, nunca no código.
 - **Aviso de versão nova:** a sala tem um número de versão (arquivo `VERSION`). A cada 2 horas ela confere o `VERSION` publicado aqui no GitHub e, se houver um maior que o seu, mostra uma tarja amarela no topo. Para desligar, `"verificar_atualizacao": false` no arquivo local de configuração.
 - **Responsável:** `"responsavel_padrao"` no arquivo local de configuração vale para todas as estações; `"responsavel"` na entrada de um agente no `agentes.json` vale só para ele.
+- **Jobs de apoio ocultos:** `"jobs_ocultos"` (lista de nomes de jobs do cron) no arquivo local de configuração tira da planta e do feed os jobs de apoio da própria sala, como o que atualiza a contagem do vault. Sem a chave, nenhum job é ocultado.
 - **Janela de manutenção:** pelo `manutencao.py` (a estação é o nome do agente ou `cron:<nome do job>`):
 
 ```bash

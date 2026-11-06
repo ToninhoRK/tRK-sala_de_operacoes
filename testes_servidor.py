@@ -500,15 +500,23 @@ class Indicadores(Base):
         self.gravar(server.VIGIA, {"rodou_em": time.time(), "erro": "o último e-mail de aviso não saiu"})
         self.assertIn("vigia", f())
 
+    def test_jobs_ocultos_vem_do_config(self):
+        """Os jobs de apoio da Sala só somem da tela se o sala_config.json os listar (nada de nome de job fixo no código)."""
+        self.assertEqual(server._jobs_ocultos(), set())                         # sem o arquivo: nada oculto
+        self.gravar(server.CONFIG, {"jobs_ocultos": ["a", "b"]})
+        self.assertEqual(server._jobs_ocultos(), {"a", "b"})
+        self.gravar(server.CONFIG, {"jobs_ocultos": "texto solto"})             # formato errado: ignora, não quebra
+        self.assertEqual(server._jobs_ocultos(), set())
+
     def test_arquivo_faltando_avisa_antes_da_falha(self):
         os.makedirs(os.path.join(server.SCRIPTS_DIR, "agente_x"))
         self.catalogo({"consulta_a": {"modelo": "m1", "prompt": "agente_x/prompt.md",
                                       "pos_validacao": {"script": os.path.join(server.SCRIPTS_DIR, "valida.py")}}})
         self.jobs([self.job("rotina", script="roda.py"), self.job("desligado", script="nao_existe.py", enabled=False),
-                   self.job("govti-vault-contagem", script="oculto.py")])
+                   self.job("apoio-exemplo", script="oculto.py")])
         msg = lambda: " ".join(x["msg"] for x in self.estado()["saude"] if x["fonte"] == "arquivos")
         m = msg()
-        for esperado in ("job rotina", "job govti-vault-contagem", "prompt do agente consulta_a", "pós-validação do agente consulta_a"):
+        for esperado in ("job rotina", "job apoio-exemplo", "prompt do agente consulta_a", "pós-validação do agente consulta_a"):
             self.assertIn(esperado, m)
         self.assertNotIn("desligado", m)                                          # job desligado não roda: não acusa
         for f in ("roda.py", "oculto.py", "valida.py", "agente_x/prompt.md"):
@@ -573,13 +581,13 @@ class Vigia(Base):
         con.commit(); con.close()
         self.jobs([{"id": "j-rotina", "name": "rotina", "enabled": True, "schedule": {"expr": "0 * * * *"}, "script": "x.py",
                     "next_run_at": iso(-1800), "last_run_at": iso(900), "last_status": "ok"},
-                   {"id": "j-apoio", "name": "govti-vault-contagem", "enabled": True, "schedule": {"expr": "*/5 * * * *"}, "script": "y.py"}])
+                   {"id": "j-apoio", "name": "apoio-exemplo", "enabled": True, "schedule": {"expr": "*/5 * * * *"}, "script": "y.py"}])
         self.enviados = os.path.join(self.tmp, "enviados.txt")
         self.himalaya = os.path.join(self.tmp, "himalaya")
         with open(self.himalaya, "w") as f:
             f.write("#!/bin/sh\n[ -f %s/falhar ] && exit 1\necho '-----' >> %s\ncat >> %s\n" % (self.tmp, self.enviados, self.enviados))
         os.chmod(self.himalaya, 0o755)
-        self.gravar(server.CONFIG, {"alerta_email": {"para": "alguem@exemplo.com", "de": "sala@exemplo.com", "himalaya": self.himalaya}})
+        self.gravar(server.CONFIG, {"jobs_ocultos": ["apoio-exemplo"], "alerta_email": {"para": "alguem@exemplo.com", "de": "sala@exemplo.com", "himalaya": self.himalaya}})
         hoje = datetime.now()
         self.resumo = os.path.join(self.tmp, "resumo.json")                                # resumo desta semana já enviado
         self.gravar(self.resumo, {"semana": (hoje - timedelta(days=hoje.weekday())).strftime("%Y-%m-%d")})

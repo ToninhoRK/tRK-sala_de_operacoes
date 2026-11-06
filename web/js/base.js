@@ -62,7 +62,7 @@ const manTxt=n=>n?' · '+T(n+' em manutenção (fora da conta)',n+' under mainte
 function sucTxt(su){if(!su||!su.execucoes)return T('sem execuções no período','no runs in the period')+manTxt(su&&su.manutencao);
   return fmtPct(su.pct)+' OK · '+(su.execucoes-su.falhas)+T(' de ',' of ')+su.execucoes+(su.falhas?' · <span style="color:var(--red)">'+su.falhas+T(' falha'+(su.falhas>1?'s':''),' failure'+(su.falhas>1?'s':''))+'</span>':'')+manTxt(su.manutencao)}
 const JSTL=EN?{running:'TALKING TO YOU',ok:'AVAILABLE',idle:'AVAILABLE',error:'AVAILABLE'}:{running:'ATENDENDO VOCÊ',ok:'DISPONÍVEL',idle:'DISPONÍVEL',error:'DISPONÍVEL'};
-const labelTec=id=>id.replace('cron:govti-','cron · ').replace('office365','o365').replace(/-/g,' ');
+const labelTec=id=>id.replace(/^cron:[a-z0-9]+-/,'cron · ').replace('office365','o365').replace(/-/g,' ');
 // nomes amigáveis: campo "nomes" do layout.json (o servidor manda em "titulo"); CONFIGURAR > Nomes > Técnicos volta ao id
 let TITULOS={};
 function titulosDe(s){const t={};[...(s.agents||[]),...(s.crons||[])].forEach(x=>{if(x.titulo)t[x.id]=x.titulo});return t}

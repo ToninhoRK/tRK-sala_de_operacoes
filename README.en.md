@@ -155,6 +155,7 @@ Without Hermes, these work the same: station, state, history, duration, failures
 - **Integrations:** the team queue in Agidesk and the note count of an Obsidian vault are set up in a local file (see `config.exemplo.json`). The access key lives in the macOS Keychain, never in the code.
 - **New-version notice:** the room has a version number (the `VERSION` file). Every 2 hours it checks the `VERSION` published here on GitHub and, if it is higher than yours, shows a yellow banner at the top. To turn it off, set `"verificar_atualizacao": false` in the local config file.
 - **Owner:** `"responsavel_padrao"` in the local config file applies to every station; `"responsavel"` in an agent's entry in `agentes.json` applies to that agent only.
+- **Hidden support jobs:** `"jobs_ocultos"` (a list of cron job names) in the local config file removes the room's own support jobs, such as the one that refreshes the vault count, from the floor plan and the feed. Without the key, no job is hidden.
 - **Maintenance window:** with `manutencao.py` (the station is the agent's name or `cron:<job name>`):
 
 ```bash

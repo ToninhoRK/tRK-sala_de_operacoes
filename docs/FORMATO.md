@@ -185,5 +185,6 @@ Com o Hermes instalado, a sala também confere se existem o script de cada job a
 Fica fora do repositório (modelo em `config.exemplo.json`). Além das chaves do Agidesk e do vault:
 
 - `responsavel_padrao`: responsável de toda estação sem `responsavel` próprio.
+- `jobs_ocultos` (opcional): lista de nomes de jobs do cron que a sala não mostra na planta nem no feed (jobs de apoio dela, como a contagem do vault). Sem a chave, nenhum job é ocultado.
 - `alerta_email`: `{"para": "um endereço só", "de": "remetente", "conta_himalaya": "conta de envio"}`. Sem esta chave, o vigia
   só guarda o histórico. Mais de um endereço em `para` é recusado.

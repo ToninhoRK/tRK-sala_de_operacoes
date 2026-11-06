@@ -7,5 +7,6 @@
   "responsavel_padrao": "Seu Nome",
   "verificar_atualizacao": true,
   "skills_prefixo_setor": "meu-",
+  "jobs_ocultos": ["nome-do-job-de-apoio"],
   "alerta_email": {"para": "voce@exemplo.com", "de": "sala@exemplo.com", "conta_himalaya": "nome-da-conta-no-himalaya"}
 }

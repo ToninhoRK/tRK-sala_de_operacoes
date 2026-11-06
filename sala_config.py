@@ -9,6 +9,7 @@ Chaves usadas:
   vault_path                 pasta do vault do Obsidian a contar (placa da DIRETORIA)
   responsavel_padrao         (opcional) responsável de toda estação sem "responsavel" no agentes.json (server.py)
   alerta_email               (opcional) {"para": um endereço só, "de", "conta_himalaya"}: e-mail do vigia_sala.py
+  jobs_ocultos               (opcional) lista de nomes de jobs do cron que a Sala não mostra nem no feed (jobs de apoio dela: contagem do vault, números da equipe)
   skills_prefixo_setor       (opcional) prefixo das suas skills próprias (ex.: "meu-"): a placa do vault mostra quantas skills têm esse prefixo no tooltip
 """
 import os, sys, json
