@@ -315,6 +315,22 @@ def main(argv=()):
         sinal_de_vida("a Sala não respondeu (%s)" % e)
         return 1
     sinal_de_vida()   # só após foto() sucesso: se o vigia travar, o sinal de vida para de ser atualizado
+    # Avisos de infraestrutura (gateway parado, disco cheio, bateria baixa) — cada um entra no saude (faixa âmbar) e gera 1 e-mail por rodada
+    try:
+        import subprocess, os as _os
+        gw = subprocess.run(["launchctl","print","gui/%d/ai.hermes.gateway"%_os.getuid()],capture_output=True,text=True,timeout=5)
+        if gw.returncode!=0 and subprocess.run(["pgrep","-f","gateway"],capture_output=True,text=True,timeout=5).returncode!=0:
+            problema("gateway","gateway parado: jobs agendados não disparam","gateway stopped: scheduled jobs do not fire")
+        st = _os.statvfs("/")
+        livre_pct = st.f_bavail * 100.0 / st.f_blocks
+        if livre_pct < 10:
+            problema("disco","disco com %.0f%% livre: risco de falha na gravação"%livre_pct,"disk at %.0f%% free: risk of write failure"%livre_pct)
+        batt = subprocess.run(["pmset","-g","batt"],capture_output=True,text=True,timeout=5)
+        m = re.search(r"(\d+)%.*; (charging|discharging)",batt.stdout)
+        if m and int(m.group(1))<20 and m.group(2)=="discharging":
+            problema("bateria","Mac na bateria a %.0f%% e sem carregador"%int(m.group(1)),"Mac on battery at %d%% and not charging"%int(m.group(1)))
+    except Exception:
+        pass
     try:
         a = server.ler_json(BASE)
     except FileNotFoundError:

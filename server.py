@@ -383,6 +383,52 @@ def tendencia(hist, crons_execs, dias=7):
 ATRASO_TOLERANCIA_S = 600   # job com a próxima rodada vencida há mais de 10 min (e sem estar rodando) = ATRASADO: o agendador não disparou (Mac dormindo, gateway parado)
 ANTIGO_S = 7 * 86400        # agente sem rodar há mais de 7 dias: selo apagado (não é falha; agentes sob demanda passam dias parados)
 
+# Recursos do Mac e do servidor: leitura cara (~28 ms de ps -A), cacheada 10 s
+_RECURSOS = {"t": 0, "d": None}
+
+
+def recursos_ler():
+    """Lê CPU/memória do Mac e do servidor, com cache de 10 s (não encare cada poll)."""
+    agora = time.time()
+    if _RECURSOS["d"] is not None and agora - _RECURSOS["t"] < 10:
+        return _RECURSOS["d"]
+    try:
+        import subprocess
+        # carga média 1 min do macOS, como % de um núcleo (loadavg / ncpu * 100)
+        ncpu = os.cpu_count() or 1
+        load1 = os.getloadavg()[0]
+        servidor_cpu = round(load1 / ncpu * 100, 1)
+        # RSS do servidor (este processo)
+        import resource
+        servidor_mem = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)
+        # CPU do Mac inteiro: soma de %cpu de todos os processos
+        ps = subprocess.run(["ps", "-A", "-o", "%cpu="], capture_output=True, text=True, timeout=5)
+        mac_cpu = round(sum(float(x) for x in ps.stdout.split() if x), 1)
+        # pressão de memória do macOS (derivada de vm_stat / memory_pressure)
+        mp = subprocess.run(["memory_pressure", "-q"], capture_output=True, text=True, timeout=5)
+        m = re.search(r"System-wide memory free percentage:\s*(\d+)", mp.stdout)
+        mac_mem = round(100 - (int(m.group(1)) if m else 0), 1)
+        # bateria
+        batt = subprocess.run(["pmset", "-g", "batt"], capture_output=True, text=True, timeout=5)
+        bp = re.search(r"(\d+)%.*; (charging|discharging)", batt.stdout)
+        bateria_pct = int(bp.group(1)) if bp else None
+        bateria_carregando = bool(bp and bp.group(2) == "charging") if bp else None
+        d = {
+            "servidor_cpu_s": servidor_cpu,
+            "servidor_mem_mb": servidor_mem,
+            "mac_cpu_pct": mac_cpu,
+            "mac_mem_pressao_pct": mac_mem,
+            "mac_bateria_pct": bateria_pct,
+            "mac_bateria_carregando": bateria_carregando,
+        }
+    except Exception:
+        d = {"servidor_cpu_s": None, "servidor_mem_mb": None,
+             "mac_cpu_pct": None, "mac_mem_pressao_pct": None,
+             "mac_bateria_pct": None, "mac_bateria_carregando": None}
+    _RECURSOS["t"] = agora
+    _RECURSOS["d"] = d
+    return d
+
 
 def iso_epoch(s):
     """'2026-10-15T15:20:00-03:00' (ou sem fuso, hora local) -> epoch; None se vazio ou ilegível."""
@@ -1209,7 +1255,29 @@ def estado(dias=7):
     for c in crons:
         c["sucesso"] = indice_sucesso([(t, f) for t, f, _ in trab.get(c["id"], [])], jan.get(c["id"], []), corte)
         c["historico_desde"] = ts_local(min(t for t, _, _ in trab[c["id"]]))[:10] if trab.get(c["id"]) else None
-    # tela JOBS: agendamento por extenso, próximas execuções (7 dias), execuções por dia e duração no período
+    # SLO de sucesso de jobs (meta padrão 95%, pode vir de sala_config.json: slo_pct_por_job)
+    try:
+        slo_cfg = (ler_json(CONFIG) or {}).get("slo_pct_por_job") or {}
+    except Exception:
+        slo_cfg = {}
+    slo_pct_padrao = 95
+    for c in crons:
+        meta = slo_cfg.get(c["id"], slo_cfg.get(c["name"], slo_pct_padrao))
+        try:
+            meta = int(meta)
+        except Exception:
+            meta = slo_pct_padrao
+        su = c.get("sucesso") or {}
+        pct = su.get("pct")
+        orc = round((su.get("execucoes") or 0) * (100 - meta) / 100) if su.get("execucoes") else 0
+        dentro = (pct is None) or (pct >= meta)
+        c["slo_pct"] = meta
+        c["slo_orcamento_erros"] = orc
+        c["slo_dentro"] = dentro
+        if not dentro:
+            problema("slo:" + c["id"],
+                     "SLO de %s: %s OK (meta %d%%)" % (c["name"], round(pct,1) if pct is not None else "—", meta),
+                     "SLO of %s: %s OK (meta %d%%)" % (c["name"], round(pct,1) if pct is not None else "—", meta))
     ini_dados = min((iso_epoch(e["started_at"]) for _, ex in execs_cron for e in ex if iso_epoch(e.get("started_at"))), default=None)
     dias_p = [(agora - timedelta(days=i)).date() for i in range(dias - 1, -1, -1)]
     por_nome = {jb.get("name"): jb for jb in CRON_JOBS_TODOS}
@@ -1247,7 +1315,29 @@ def estado(dias=7):
         c["duracao"] = {"media_s": round(sum(durs) / len(durs)) if durs else None, "max_s": round(max(durs)) if durs else None,
                         "n": len(durs), "soma_s": round(sum(durs))}
         c["ultimas"] = ult[-10:][::-1]
-    # job que chama um agente: a falha que não chegou ao log de nenhum agente (caiu antes ou fora dele) conta no índice geral
+    # SLO de sucesso de jobs (meta padrão 95%, pode vir de sala_config.json: slo_pct_por_job)
+    try:
+        slo_cfg = (ler_json(CONFIG) or {}).get("slo_pct_por_job") or {}
+    except Exception:
+        slo_cfg = {}
+    slo_pct_padrao = 95
+    for c in crons:
+        meta = slo_cfg.get(c["id"], slo_cfg.get(c["name"], slo_pct_padrao))
+        try:
+            meta = int(meta)
+        except Exception:
+            meta = slo_pct_padrao
+        su = c.get("sucesso") or {}
+        pct = su.get("pct")
+        orc = round((su.get("execucoes") or 0) * (100 - meta) / 100) if su.get("execucoes") else 0
+        dentro = (pct is None) or (pct >= meta)
+        c["slo_pct"] = meta
+        c["slo_orcamento_erros"] = orc
+        c["slo_dentro"] = dentro
+        if not dentro:
+            problema("slo:" + c["id"],
+                     "SLO de %s: %s OK (meta %d%%)" % (c["name"], round(pct,1) if pct is not None else "—", meta),
+                     "SLO of %s: %s OK (meta %d%%)" % (c["name"], round(pct,1) if pct is not None else "—", meta))
     falhas_log = [ep(e) for e in hist if e["code"] != 0]
     falhas_fora = sum(1 for c in crons if c["chama_agente"] for t, f, fim in trab.get(c["id"], [])
                       if f and t >= corte and not em_manutencao(jan.get(c["id"], []), t)
@@ -1289,6 +1379,7 @@ def estado(dias=7):
         "sucesso": indice_geral(agentes, crons, cat, falhas_fora),
         "eventos_executor": bool(exs),
         "jobs_dados_desde": ts_local(ini_dados)[:10] if ini_dados else None,
+        "recursos": recursos_ler(),
     }
     vigia_saude(agora_s)
     arquivos_faltando(cat, CRON_JOBS_TODOS)
@@ -1302,7 +1393,8 @@ def estado(dias=7):
     sem_setor = [i for i, (z, m) in origem.items() if m.startswith("padrão")]
     return {"now": agora.strftime("%Y-%m-%d %H:%M:%S"), "agents": agentes, "crons": crons,
             "feed": feed, "kpis": kp, "layout": layout, "sem_setor": sem_setor, "jarvis": jarvis, "claude_usage": claude_uso(), "vault": vault_painel(), "equipe_estacao": est_equipe, "equipe": equipe,
-            "saude": list(SAUDE), "periodo_dias": dias, "atualizacao": atualizacao_info(), "versao": 6}
+            "saude": list(SAUDE), "periodo_dias": dias, "atualizacao": atualizacao_info(), "versao": 6,
+            "recursos": recursos_ler()}
 
 
 # Atividade AO VIVO (23/10/2026): a mesma leitura do modo ao vivo do terminal (rodar_agente.py). Raciocínio, respostas e
@@ -1443,6 +1535,11 @@ class H(BaseHTTPRequestHandler):
             self.send_header("Content-Type", ctype)
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Security-Policy",
+                             "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             if self.command != "HEAD":

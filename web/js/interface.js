@@ -39,8 +39,8 @@ function update(s){
   all().forEach(it=>{
     if(STATIONS[it.id])STATIONS[it.id].it=it;
     const late=atrasado(it);
-    document.querySelectorAll('.st:not(.lb)[data-id="'+it.id+'"]').forEach(g=>{if(!g.hasAttribute('tabindex')){g.setAttribute('tabindex','0');g.setAttribute('role','button')}g.setAttribute('aria-label',label(it.id)+': '+estadoTxt(it))});
-    document.querySelectorAll('.st[data-id="'+it.id+'"], .wk[data-id="'+it.id+'"]').forEach(g=>{setStatusClass(g,it.status);g.classList.toggle('late',late);g.classList.toggle('velho',!!it.antigo&&!late&&it.status!=='manut');g.classList.toggle('stuck',estStuck(it))});
+    document.querySelectorAll('.st:not(.lb)[data-id="'+CSS.escape(it.id)+'"]').forEach(g=>{if(!g.hasAttribute('tabindex')){g.setAttribute('tabindex','0');g.setAttribute('role','button')}g.setAttribute('aria-label',label(it.id)+': '+estadoTxt(it))});
+    document.querySelectorAll('.st[data-id="'+CSS.escape(it.id)+'"], .wk[data-id="'+CSS.escape(it.id)+'"]').forEach(g=>{setStatusClass(g,it.status);g.classList.toggle('late',late);g.classList.toggle('velho',!!it.antigo&&!late&&it.status!=='manut');g.classList.toggle('stuck',estStuck(it))});
   });
   if(SEL)select(SEL);
   if(built)pastasChecar(antes);
@@ -83,9 +83,17 @@ function spark(t,w=112,h=26){
     return `<rect x="${(i*bw+.5).toFixed(1)}" y="${(h-hh).toFixed(1)}" width="${(bw-1.5).toFixed(1)}" height="${hh.toFixed(1)}" fill="${c}"/>`+(hf?`<rect x="${(i*bw+.5).toFixed(1)}" y="${(h-hf).toFixed(1)}" width="${(bw-1.5).toFixed(1)}" height="${hf.toFixed(1)}" fill="#F25C60"/>`:'')}).join('')+'</svg>'}
 function tendTxt(t){const ex=(t||[]).reduce((a,x)=>a+x[0],0), fa=(t||[]).reduce((a,x)=>a+x[1],0);return ex+T(' execuç'+(ex===1?'ão':'ões'),' run'+(ex===1?'':'s'))+(fa?' · <span style="color:var(--red)">'+fa+T(' falha'+(fa>1?'s':''),' failure'+(fa>1?'s':''))+'</span>':'')}
 function atrasado(it){return !!(it&&it.atrasado_s)&&it.status!=='error'&&it.status!=='running'}
-// veredito da operação: FALHA > ATENÇÃO (sem ação, atrasado, fonte de dados com problema) > NORMAL
+// veredito da operação: FALHA > ATENÇÃO (sem ação, atrasado, fonte de dados com problema) > NORMAL > SEM CONEXÃO (sem dados válidos do servidor)
+// SEM_DADOS_MAX_S: segundos sem resposta do servidor antes de considerar o painel desconectado (não é "tudo normal")
+const SEM_DADOS_MAX_S = 30;
 function veredito(s){
   const k=s.kpis, sd=(s.saude||[]).length, p=[], pl=(n,a,b)=>n+' '+(n>1?b:a);
+  // sem dados válidos do servidor há mais de SEM_DADOS_MAX_S s: falso "tudo normal" é pior do que dizer que não sabemos
+  const idade = s && s._t ? (Date.now() - s._t)/1000 : 0;
+  if(idade > SEM_DADOS_MAX_S){
+    const m = Math.round(idade/60);
+    return {t:T('SEM CONEXÃO','OFFLINE'),c:'r',d:T('sem dados há ','no data for ')+(m<60?m+' '+T('min','min'):Math.floor(m/60)+' '+T('h','h'))+(p.length?' · '+p.join(' · '):'')};
+  }
   if(k.aguardando)p.push(T('Jarvis aguardando você','Jarvis waiting for you'));
   if(k.late)p.push(pl(k.late,T('atrasado','late'),T('atrasados','late'))); if(k.stuck)p.push(pl(k.stuck,T('sem ação','with no activity'),T('sem ação','with no activity'))); if(sd)p.push(pl(sd,T('fonte com problema','source with a problem'),T('fontes com problema','sources with a problem')));
   if(k.in_error)return {t:T('FALHA','FAILURE'),c:'r',d:pl(k.in_error,T('estação em falha','station failed'),T('estações em falha','stations failed'))+(p.length?' · '+p.join(' · '):'')};
@@ -115,7 +123,7 @@ function tick(){
   if(!STATE)return;
   const el0=(Date.now()-STATE._t)/1000;
   all().forEach(it=>{
-    const g=document.querySelector('.st.lb[data-id="'+it.id+'"]'); if(!g)return;
+    const g=document.querySelector('.st.lb[data-id="'+CSS.escape(it.id)+'"]'); if(!g)return;
     const sx=g.querySelector('[data-r=sx]'); let t;
     if(it.kind==='equipe'){
       if(it.decor)return;
