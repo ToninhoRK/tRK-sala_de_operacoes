@@ -400,7 +400,7 @@ def recursos_ler():
         servidor_cpu = round(load1 / ncpu * 100, 1)
         # RSS do servidor (este processo)
         import resource
-        servidor_mem = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)
+        servidor_mem = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024 * 1024), 1)
         # CPU do Mac inteiro: soma de %cpu de todos os processos
         ps = subprocess.run(["ps", "-A", "-o", "%cpu="], capture_output=True, text=True, timeout=5)
         mac_cpu = round(sum(float(x) for x in ps.stdout.split() if x), 1)
