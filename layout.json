@@ -69,5 +69,6 @@
   ],
   "nomes": {"consulta_exemplo": "Consulta exemplo", "rotina_exemplo": "Rotina exemplo", "auditoria_exemplo": "Auditoria exemplo", "relatorio_exemplo": "Relatório exemplo", "cron:rotina-diaria-exemplo": "Job rotina diária",
     "cron:sincronizacao-exemplo": "Job sincronização",
-    "cron:relatorio-semanal-exemplo": "Job relatório semanal"}
+    "cron:relatorio-semanal-exemplo": "Job relatório semanal",
+    "cron:govti-skills-sync": "Job Skills Sync"}
 }

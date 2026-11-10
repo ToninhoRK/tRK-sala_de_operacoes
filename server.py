@@ -675,7 +675,9 @@ def cron_dados():
         problema("jobs.json", "jobs.json do cron ilegível: os jobs agendados não aparecem", "cron jobs.json unreadable: scheduled jobs are not shown")
         return []
     CRON_JOBS_TODOS[:] = jobs          # inclusive os ocultos: o script deles também precisa existir
-    jobs = [x for x in jobs if x.get("name") not in JOBS_OCULTOS and not (x.get("name") or "").startswith("avulso-")]   # "avulso-*" = demandas pontuais fora do monitoramento
+    if not isinstance(jobs, list):
+        jobs = []
+    jobs = [x for x in jobs if isinstance(x, dict) and x.get("name") not in JOBS_OCULTOS and not (x.get("name") or "").startswith("avulso-")]   # "avulso-*" = demandas pontuais fora do monitoramento
     execs = {}
     try:
         # o executions.db está em modo WAL: com mode=ro o SQLite recusa ("unable to open database file"); mode=rw + query_only lê sem poder escrever
@@ -701,12 +703,14 @@ def cron_dados():
     saida = []
     hoje = datetime.now().strftime("%Y-%m-%d")
     for jb in jobs:
-        ex = execs.get(jb["id"], [])
+        jid_resp = "cron:" + (jb.get("name") or "")
+        jid_exec = jb.get("id") or jid_resp   # id do job no jobs.json: o cron_hist_sala() chaveia por ele
+        ex = execs.get(jid_exec, [])
         rodando = next((e for e in ex if e["status"] in ("running", "claimed") and pid_vivo(e["pid"])), None)
         ultimo = ex[0] if ex else None
         sch = jb.get("schedule") or {}
         saida.append({
-            "id": "cron:" + jb["name"], "kind": "cron", "name": jb["name"],
+            "id": jid_resp, "kind": "cron", "name": jb.get("name") or "",
             "desc": "Job agendado: %s" % (sch.get("display") or sch.get("expr") or ""),
             "schedule": sch.get("display") or sch.get("expr"),
             "enabled": jb.get("enabled", True),
@@ -1063,7 +1067,11 @@ def indice_geral(agentes, crons, cat, falhas_fora=0):
 def estado(dias=7):
     agora = datetime.now()
     hoje = agora.strftime("%Y-%m-%d")
-    cat = ler_json(AGENTES)
+    try:
+        cat = ler_json(AGENTES)
+    except Exception:
+        problema("agentes.json", "catalogo de agentes ilegível: as estações não aparecem", "agent catalog unreadable: stations are not shown")
+        cat = {}
     hist = historico()
     rod = rodando_agora()
     exs = execucoes()
@@ -1250,7 +1258,7 @@ def estado(dias=7):
         resp_padrao = None
     for x in agentes + crons:
         x["responsavel"] = (cat.get(x["id"], {}).get("responsavel") if x["kind"] == "agent" else None) or resp_padrao
-    tend, tend_por = tendencia(hist, execs_cron, dias)
+    tend, tend_por = tendencia(hist, [(cid, ex) for cid, ex in execs_cron if not any(c.get("chama_agente") for c in crons if c.get("id") == cid)], dias)
     if agora_s - _CUSTO.get(dias, (0,))[0] > 60:   # custo muda devagar: recalcula no máximo 1x por minuto (por período)
         _CUSTO[dias] = (agora_s, custos(hist, exs, dias))
     cst = _CUSTO[dias][1]
@@ -1425,6 +1433,7 @@ def atividade(agente, modo="resumo"):
             "parado_ha_s": int(agora - ultima) if (ao_vivo and ultima) else None}
 
 class H(BaseHTTPRequestHandler):
+    timeout = 10          # conexão ociosa fecha após 10 s: 200 sockets mudos não travam 201 threads (P8)
     def log_message(self, *a):
         pass
 
@@ -1529,4 +1538,5 @@ if __name__ == "__main__":
     porta = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
     print("Sala de Operações em http://127.0.0.1:%d" % porta, flush=True)
     BUSCAR_VERSAO = True
+    H.request_queue_size = 64               # fila de escuta: 20 requisições simultâneas não falham (P9)
     ThreadingHTTPServer(("127.0.0.1", porta), H).serve_forever()

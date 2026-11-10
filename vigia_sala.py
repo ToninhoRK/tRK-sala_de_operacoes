@@ -297,7 +297,6 @@ def main(argv=()):
         print("resumo enviado: %s" % assunto if ok else "o resumo NÃO saiu (%s)" % msg)
         return 0 if ok else 1
     codigo = 0
-    sinal_de_vida()
     try:
         n = coletar_historico()
         if n:
@@ -310,7 +309,12 @@ def main(argv=()):
     if not cfg:
         return codigo
     del server.SAUDE[:]
-    b = foto(server.estado(7))
+    try:
+        b = foto(server.estado(7))
+    except Exception as e:
+        sinal_de_vida("a Sala não respondeu (%s)" % e)
+        return 1
+    sinal_de_vida()   # só após foto() sucesso: se o vigia travar, o sinal de vida para de ser atualizado
     try:
         a = server.ler_json(BASE)
     except FileNotFoundError:
