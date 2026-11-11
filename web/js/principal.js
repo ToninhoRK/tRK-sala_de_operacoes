@@ -1,9 +1,24 @@
 /* Sala de Operações · Início: consulta ao /api/state, laço principal e popup "o que o agente está fazendo".
    Scripts clássicos carregados em ordem pelo index.html: compartilham o escopo global (sem build, sem dependências). */
+/* Demonstração online (GitHub Pages, sem servidor): server.py --exportar-demo embute um /api/state de EXEMPLO em
+   window.SALA_ESTATICA. A cada consulta usa uma cópia com as datas deslocadas para hoje (a foto envelhece; a demo não). */
+function estaticaEstado(){
+  const s=JSON.parse(JSON.stringify(ESTATICA)), base=Date.parse(String(s.now).replace(' ','T')), dt=isNaN(base)?0:Date.now()-base;
+  const dias=Math.floor(dt/864e5), p2=n=>String(n).padStart(2,'0');
+  const fmt=(d,sep,seg)=>d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate())+sep+p2(d.getHours())+':'+p2(d.getMinutes())+(seg?':'+p2(d.getSeconds()):'');
+  const mover=v=>{if(typeof v!=='string')return v;
+    let m=v.match(/^(\d{4}-\d{2}-\d{2})([ T])(\d{2}:\d{2})(:\d{2})?(.*)$/);
+    if(m){const d=new Date(Date.parse(m[1]+'T'+m[3]+(m[4]||''))+dt);return fmt(d,m[2],!!m[4])+(m[2]==='T'?'':m[5])}
+    if(/^\d{4}-\d{2}-\d{2}$/.test(v)&&dias){const d=new Date(Date.parse(v+'T12:00')+dias*864e5);return fmt(d,' ',false).slice(0,10)}
+    return v};
+  const andar=o=>{if(Array.isArray(o)){for(let i=0;i<o.length;i++){o[i]=typeof o[i]==='object'&&o[i]?andar(o[i]):mover(o[i])}return o}
+    if(o&&typeof o==='object')for(const k in o)o[k]=typeof o[k]==='object'&&o[k]?andar(o[k]):mover(o[k]);return o};
+  return andar(s);
+}
 async function poll(){
   if(document.hidden&&built&&!DBG&&(!SOM.on||Date.now()-SOM.ult<10000))return;   // aba escondida: sem consulta; com o som ligado, 1 consulta a cada 10 s para o alerta tocar
   SOM.ult=Date.now();
-  try{const r=await fetch('/api/state?dias='+CFG.periodo,{cache:'no-store'});const s=await r.json();if(DEMO)demo(s);
+  try{const s=ESTATICA?estaticaEstado():await (await fetch('api/state?dias='+CFG.periodo,{cache:'no-store'})).json();if(DEMO)demo(s);
     const sig=JSON.stringify(s.layout.zones.map(z=>[z.id,z.items,z.w,z.h]));
     TITULOS=titulosDe(s);
     if(!built||sig!==SIG){const first=!built;SIG=sig;build(s);STATE=s;update(s);
@@ -34,9 +49,49 @@ function testesPagina(s,first){
           const zz=Object.values(ZONES).find(z=>w.x>=z.x&&w.x<=z.x+z.w&&w.y>=z.y&&w.y<=z.y+z.h);if(zz)zonas.add(zz.id);
           if(arr===null&&!w.carry&&w.at&&w.at.type==='entrega'){arr=t;break}}
         L.push('pasta '+a+' > '+b+': entregue em '+(arr===null?'NUNCA':arr.toFixed(1)+' s')+' | distância '+dist.toFixed(1)+' | salas '+[...zonas].join('/')+' | com a pasta '+comPasta.toFixed(1)+' s | pose '+poseOf(w)+' | entregues '+PASTAS.entregues)}}}}
+/* Rodízio de telas na TV (?rodizio=tv,jobs,office&lida=30): alterna visão a cada N segundos;
+   para no RESUMO/qualquer visão com falha (veredito vermelho) e quando o usuário interage. */
+let rodizioTimer=null, rodizioIdx=0, rodizioVisoes=[];
+function rodizioAplicar(v){
+  if(v==='tv'){document.body.classList.add('tv');CFG.tema='tv';return}
+  if(v==='office'){document.body.classList.remove('tv');CFG.tema='planta';visaoLigar('office');return}
+  if(v==='lista'){document.body.classList.remove('tv');CFG.tema='planta';visaoLigar('lista');return}
+  if(v==='jobs'){document.body.classList.remove('tv');CFG.tema='planta';visaoLigar('jobs');return}
+  if(v==='resumo'){document.body.classList.remove('tv');CFG.tema='planta';visaoLigar('resumo');return}
+}
+function rodizioProximo(){
+  if(!rodizioVisoes.length)return;
+  rodizioIdx=(rodizioIdx+1)%rodizioVisoes.length;
+  const v=rodizioVisoes[rodizioIdx];
+  rodizioAplicar(v);
+  const ver=STATE&&veredito(STATE);
+  if(ver&&ver.c==='r'){rodizioParar();}   // falha: fica na visão do problema
+}
+function rodizioParar(){if(rodizioTimer){clearInterval(rodizioTimer);rodizioTimer=null}rodizioIdx=0;CFG.rodizio=[];}
+function rodizioIniciar(){
+  const q=QS.get('rodizio');
+  if(!q)return;
+  rodizioParar();                                     // para o timer antigo (se houver)
+  rodizioVisoes=q.split(',').map(x=>x.trim()).filter(x=>x==='tv'||x==='office'||x==='lista'||x==='jobs');
+  if(!rodizioVisoes.length)return;
+  rodizioAplicar(rodizioVisoes[0]);
+  CFG.rodizio=rodizioVisoes;
+  const cada=+(QS.get('cada')||QS.get('lida')||30);
+  rodizioTimer=setInterval(rodizioProximo, cada*1000);
+  document.addEventListener('click',rodizioParar,{once:true,passive:true});
+  document.addEventListener('keydown',rodizioParar,{once:true,passive:true});
+}
 cfgMenuMontar();
+/* Abre direto no RESUMO em telas pequenas (<=700 px) se o usuario ainda nao escolheu outra visão. */
+(function(){
+  if(QS.has('debug')||QS.has('ff')||QS.has('testrun')||QS.has('testpasta'))return;
+  if(window.matchMedia&&window.matchMedia('(max-width:700px)').matches&&!QS.has('jobs')&&!QS.has('lista')&&!(()=>{try{return localStorage.getItem('sala_visao')}catch(e){return 1}})()){
+    visaoLigar('resumo');
+  }
+})();
+if(QS.has('ajustes')&&!ESTATICA&&!DEMO)setTimeout(ajustesAbrir,1200);   // ?ajustes=1: abre AJUSTES DA SALA (capturas de teste)
 if(QS.has('debug')){poll().then(()=>setTimeout(debugReport,300))}
-else{poll();setInterval(poll,1000);if(DEMO)setInterval(()=>{if(!built||!STATE)return;const fl=(STATE.layout.flows||[]).filter(([a,b])=>WORKERS[a]&&WORKERS[b]);if(fl.length){const [a,b]=fl[Math.floor(SIMT/40)%fl.length];entregarPasta(a,b)}},40000);setInterval(tick,1000);requestAnimationFrame(loop);document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll()})}
+else{poll();setInterval(poll,1000);rodizioIniciar();if(DEMO)setInterval(()=>{if(!built||!STATE)return;const fl=(STATE.layout.flows||[]).filter(([a,b])=>WORKERS[a]&&WORKERS[b]);if(fl.length){const [a,b]=fl[Math.floor(SIMT/40)%fl.length];entregarPasta(a,b)}},40000);setInterval(tick,1000);requestAnimationFrame(loop);document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll()})}
 
 /* popup "o que o agente está fazendo": clique no boneco/estação de um agente; só nomes de ferramenta e hora */
 let POP=null, POPT=null;
@@ -44,7 +99,14 @@ function fecharPop(){const p=$('pop'); if(p)p.style.display='none'; POP=null; cl
 async function atualizarPop(){
   if(!POP)return;
   try{
-    const r=await fetch('/api/atividade?agent='+encodeURIComponent(POP),{cache:'no-store'}); const a=await r.json(); if(!POP)return;
+    if(ESTATICA){   // demonstracao online: linhas ficticias, como o painel ao vivo ja faz (vivoDemo)
+        const it=all().find(x=>x.id===POP)||{};
+        const n=Math.min(5,2+Math.floor(Date.now()/4000)%4);
+        const ev=[];
+        for(let i=0;i<n;i++){ev.push({k:i%2===0?'raciocinio':'resultado',tool:it.model||'exemplo',txt:i%2===0?T('Analisando a entrada.','Analyzing the input.'):T('Resposta pronta.','Reply ready.'),t:new Date(Date.now()-(n-i)*3000).toTimeString().slice(0,8)})}
+        $('popbd').innerHTML=ev.map(function(e){return '<div class="ln"><span>'+esc(e.t)+'</span><span>'+esc(e.tool)+'</span></div>'}).join('')||'<div class="meta">'+T('Nenhuma ação registrada.','No actions recorded.')+'</div>';
+        return}
+    const r=await fetch('api/atividade?agent='+encodeURIComponent(POP),{cache:'no-store'}); const a=await r.json(); if(!POP)return;
     let b='';
     if(a.erro) b='<div class="warn">'+esc(EN&&a.erro_en||a.erro)+'</div>';
     else{
@@ -106,7 +168,7 @@ function vivoRender(a){
 }
 async function atualizarVivo(){
   if(!VIVO)return; const id=VIVO;
-  try{const a=DEMO?vivoDemo(id):await (await fetch('/api/atividade?modo=vivo&agent='+encodeURIComponent(id),{cache:'no-store'})).json();
+  try{const a=DEMO?vivoDemo(id):await (await fetch('api/atividade?modo=vivo&agent='+encodeURIComponent(id),{cache:'no-store'})).json();
     if(VIVO===id)vivoRender(a)}catch(e){}
 }
 function vivoPosicionar(){const p=$('vivo'),h=document.querySelector('header');if(p)p.style.top=Math.max(0,h?h.getBoundingClientRect().bottom:0)+'px'}

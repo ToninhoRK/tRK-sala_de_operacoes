@@ -33,6 +33,17 @@ function setStatusClass(g,status){
   const extra=['lb','desk','stuck'].filter(c=>g.classList.contains(c));
   g.setAttribute('class',[isWk?'wk':'st',status,...extra].join(' '));
 }
+/* CPU e memória do computador ao lado do fps (cinza, fora do veredito e do som); o título traz o servidor e a bateria. */
+function recursosAtualizar(s){
+  const r=s&&s.recursos, el=$('k-rec'); if(!el)return;
+  if(!r||(r.host_cpu_pct==null&&r.host_mem_pct==null)){el.textContent='';el.removeAttribute('data-det');return}
+  const n=v=>v==null?'—':decTxt(String(Math.round(v)));
+  el.textContent='CPU '+n(r.host_cpu_pct)+'% · MEM '+n(r.host_mem_pct)+'%';
+  const d=[];
+  if(r.servidor_cpu_pct!=null||r.servidor_mem_mb!=null)d.push(T('servidor da Sala: CPU ','room server: CPU ')+n(r.servidor_cpu_pct)+'% · '+n(r.servidor_mem_mb)+' MB');
+  if(r.host_bateria_pct!=null)d.push(T('bateria ','battery ')+r.host_bateria_pct+'%'+(r.host_bateria_carregando?T(' (na tomada)',' (plugged in)'):''));
+  el.title=T('CPU e memória do computador (média dos núcleos e pressão de memória), lidas a cada 10 s; sem cor, fora do veredito e do som.','CPU and memory of the computer (average of the cores and memory pressure), read every 10 s; no colour, outside the verdict and the sound.')+(d.length?'\n'+d.join(' · '):'');
+}
 function update(s){
   const antes={}; Object.values(STATIONS).forEach(st=>{antes[st.id]=st.it&&st.it.status});   // para a pasta entre salas
   STATE=s; s._t=Date.now();
@@ -47,6 +58,7 @@ function update(s){
   tick();
   document.querySelectorAll('.flow').forEach(f=>{const it=all().find(x=>x.id===f.dataset.src);f.classList.toggle('on',!!it&&it.status==='running')});
   const k=s.kpis, ver=veredito(s), num=(id,v,cls)=>{const e=$(id);e.textContent=v;e.className=v?cls:'z'};   // zero apagado: só número diferente de zero chama atenção
+  recursosAtualizar(s);
   $('k-op-v').textContent=ver.t; $('k-op-v').className=ver.c; $('k-op-s').textContent=ver.d; $('k-op').className='kpi op-'+ver.c;
   num('k-run',k.running,'c'); num('k-today',k.runs_today,''); num('k-err',k.errors_today,'r');
   if(k.tendencia){const TD=k.tendencia, ex=TD.reduce((a,x)=>a+x.execucoes,0), fa=TD.reduce((a,x)=>a+x.falhas,0);
@@ -57,12 +69,13 @@ function update(s){
       +TD.map(x=>diaMes(x.dia)+' '+x.execucoes+(x.falhas?' ('+x.falhas+T(' falha',' failed')+')':'')).join(' · ')+(k.custo_usd!=null?T(' · custo estimado ',' · estimated cost ')+P+' d: US$ '+k.custo_usd.toFixed(2):'')}
   $('k-inerr').textContent=k.in_error?T(k.in_error+' de '+(k.agents+k.crons)+' em falha agora',k.in_error+' of '+(k.agents+k.crons)+' failed now'):T('nenhuma em falha agora','none failed now');
   $('k-last').textContent=k.last_activity?rel(k.last_activity):'—';
-  renderFeed(s); renderClaude(s); renderVault(s); renderEquipe(s); if(typeof renderLista==='function')renderLista(s); if(typeof renderJobs==='function')renderJobs(s);
+  renderFeed(s); renderClaude(s); renderVault(s); renderEquipe(s); if(typeof renderLista==='function')renderLista(s); if(typeof renderJobs==='function')renderJobs(s); if(typeof renderResumo==='function'&&VISAO==='resumo')renderResumo(s);
   const nt=$('notice'),ss=s.sem_setor||[],sd=s.saude||[], msgs=[];
   if(sd.length)msgs.push(T('⚠ Fonte de dados com problema: ','⚠ Data source with a problem: ')+sd.map(x=>EN&&x.msg_en||x.msg).join(' · '));
   if(ss.length)msgs.push(T('⚠ '+ss.length+' agente(s) sem setor definido, colocado(s) em NOVOS AGENTES: ','⚠ '+ss.length+' agent(s) with no sector, placed in NOVOS AGENTES: ')+ss.join(', ')+T('. Para escolher a sala: campo "setor" no agentes.json ou layout.json.','. To choose the room: the "setor" field in agentes.json or layout.json.'));
   const av=s.atualizacao;    // tarja de versão nova: só aviso (sem som, e-mail nem veredito)
   if(av&&av.nova)msgs.push(T('⚠ Há uma versão nova da Sala ('+av.remota+'; a sua é '+av.local+'): '+av.repo,'⚠ A new version of the room is available ('+av.remota+'; yours is '+av.local+'): '+av.repo));
+  const ex=$('exemplo'); if(ex)ex.style.display=s.exemplo&&!DEMO?'block':'none';   // só sem dados do usuário; na demonstração vale a faixa da demo
   nt.style.display=msgs.length?'block':'none'; nt.textContent=msgs.join('\n'); nt.style.whiteSpace='pre-line';
   if(CFG.anim==='desligada')parado();
 }
@@ -71,8 +84,8 @@ function update(s){
 function fmtAtraso(s){s=Math.max(0,s|0);return s<3600?Math.max(1,Math.round(s/60))+' MIN':s<86400?Math.floor(s/3600)+'H'+(Math.floor(s%3600/60)?pad(Math.floor(s%3600/60))+T('','M'):''):Math.floor(s/86400)+' D'}   // 1H30 (inglês: 1H30M)
 // texto do estado para leitor de tela e modo lista
 // âmbar de atenção na estação: agente rodando sem ação há 5 min, ou o Jarvis com uma pergunta com opções esperando você (23/10/2026)
-function estStuck(it){return !!it&&((it.status==='running'&&it.sem_acao_s>=300)||(it.kind==='jarvis'&&!!it.aguardando))}
-function estadoTxt(it){if(it.kind==='jarvis'&&it.aguardando)return T('aguardando você','waiting for you');return it.status==='manut'?T('em manutenção','under maintenance'):it.status==='error'?T('falha','failed'):it.status==='running'?(it.sem_acao_s>=300?T('rodando, sem ação','running, no activity'):T('rodando','running')):atrasado(it)?T('atrasado','late'):it.status==='ok'?T('última execução OK','last run OK'):T('sem histórico','no history')}
+function estStuck(it){return !!it&&((it.status==='running'&&it.sem_acao_s>=300)||it.status==='waiting'||(it.kind==='jarvis'&&!!it.aguardando))}
+function estadoTxt(it){if(it.status==='waiting')return T('aguardando você','waiting for you');if(it.kind==='jarvis'&&it.aguardando)return T('aguardando você','waiting for you');return it.status==='manut'?T('em manutenção','under maintenance'):it.status==='error'?T('falha','failed'):it.status==='running'?(it.sem_acao_s>=300?T('rodando, sem ação','running, no activity'):T('rodando','running')):atrasado(it)?T('atrasado','late'):it.status==='ok'?T('última execução OK','last run OK'):T('sem histórico','no history')}
 // barras de execuções por dia (cinza) com a parte de falhas em vermelho; hoje à direita, um tom mais claro. Cinza: ciano é só "rodando"
 function spark(t,w=112,h=26){
   let v=(t||[]).map(x=>Array.isArray(x)?x:[x.execucoes,x.falhas]); if(!v.length)return '';
@@ -94,8 +107,10 @@ function veredito(s){
     const m = Math.round(idade/60);
     return {t:T('SEM CONEXÃO','OFFLINE'),c:'r',d:T('sem dados há ','no data for ')+(m<60?m+' '+T('min','min'):Math.floor(m/60)+' '+T('h','h'))+(p.length?' · '+p.join(' · '):'')};
   }
-  if(k.aguardando)p.push(T('Jarvis aguardando você','Jarvis waiting for you'));
+  const agu = k.aguardando||0;
+  if(agu)p.push(pl(agu,T('estacao aguardando voce','station waiting for you'),T('estoes aguardando voce','stations waiting for you')));
   if(k.late)p.push(pl(k.late,T('atrasado','late'),T('atrasados','late'))); if(k.stuck)p.push(pl(k.stuck,T('sem ação','with no activity'),T('sem ação','with no activity'))); if(sd)p.push(pl(sd,T('fonte com problema','source with a problem'),T('fontes com problema','sources with a problem')));
+  if(s.exemplo&&!DEMO&&!k.in_error&&!p.length&&!k.running&&(k.runs_today||0)==0&&(!s.feed||s.feed.length==0))return {t:T('EXEMPLO','EXAMPLE'),c:'d',d:T('agentes de exemplo, sem execuções','example agents, no runs')};   // não diz NORMAL sobre dados que não são do usuário
   if(k.in_error)return {t:T('FALHA','FAILURE'),c:'r',d:pl(k.in_error,T('estação em falha','station failed'),T('estações em falha','stations failed'))+(p.length?' · '+p.join(' · '):'')};
   if(p.length)return {t:T('ATENÇÃO','ATTENTION'),c:'a',d:p.join(' · ')};
   return {t:'NORMAL',c:'g',d:k.running?pl(k.running,T('agente rodando agora','agent running now'),T('agentes rodando agora','agents running now')):T('nada rodando agora','nothing running now')};
@@ -165,6 +180,8 @@ function renderFeed(s){
 // Detalhe da estação maior que o espaço: marca .mais (texto se apaga na borda de baixo) até a rolagem chegar ao fim.
 function marcarRolagem(){const d=document.getElementById('detail');if(d)d.classList.toggle('mais',d.scrollTop+d.clientHeight<d.scrollHeight-4)}
 document.addEventListener('DOMContentLoaded',()=>{const d=document.getElementById('detail');if(d)d.addEventListener('scroll',marcarRolagem,{passive:true});addEventListener('resize',marcarRolagem)});
+// variação do custo contra o período anterior de igual duração (Fase 2): só quando o anterior teve custo; sem cor (não é alarme)
+function varCustoTxt(it){const v=it.custo_variacao_pct;if(v==null)return'';const n=(v>0?'+':'')+v.toFixed(1);return' ('+T(n.replace('.',',')+'% vs período anterior',n+'% vs previous period')+')'}
 function renderDetail(){
   const d=$('detail'); const it=all().find(x=>x.id===SEL); if(!it)return;
   let rows=''; const add=(k,v)=>rows+=`<dt>${k}</dt><dd>${v}</dd>`;
@@ -173,13 +190,14 @@ function renderDetail(){
   const P=PER();
   if(it.kind==='agent'||it.kind==='cron'){add(T('Responsável','Owner'),esc(it.responsavel||'—'));
     if(it.manutencao)add(T('Manutenção','Maintenance'),T('até ','until ')+fmtTs(it.manutencao.ate+':00')+(it.manutencao.motivo?' · '+esc(it.manutencao.motivo):'')+'<br><span style="color:var(--dim)">'+T('falha e atraso não alarmam nem contam no índice','failures and delays raise no alarm and do not count in the rate')+(it.status_real?T('; estado real: ','; real state: ')+esc(STL[it.status_real]||it.status_real):'')+'</span>')}
+  if(it.dado_idade_s!=null&&(it.kind==='agent'||it.kind==='cron'))add(T('Último dado','Last data'),it.dado_idade_s<60?T('há menos de 1 min','under 1 min ago'):T('há ','')+fmtAtraso(it.dado_idade_s).toLowerCase()+T('',' ago'));
   if(it.kind==='agent'){
     add(T('Modelo','Model'),esc(it.model||'—')); add(T('Provedor','Provider'),esc(it.provider||'—'));
     add('Skills',esc((it.skills||[]).join(', ')||'—')); add(T('Turnos máx.','Max turns'),esc(it.max_turns??'—'));
     add(T('Execuções','Runs'),T(`${it.runs_today} hoje · ${it.runs_total} no histórico`,`${it.runs_today} today · ${it.runs_total} in history`));
     add(T('Últimos '+P+' dias','Last '+P+' days'),spark(it.tendencia)+'<br><span style="color:var(--dim)">'+tendTxt(it.tendencia)+'</span>');
     add(T('Sucesso ','Success ')+P+' d',sucTxt(it.sucesso)+desdeTxt(it,P));
-    const c=it.custo; add(T('Consumo ','Usage ')+P+' d',c?fmtTok(c.tokens)+' tokens · '+c.execucoes+T(' exec.',' runs')+(c.custo_usd>0?' · US$ '+c.custo_usd.toFixed(2):'')+'<br><span style="color:var(--dim)">'+(c.custo_usd>0?T('custo estimado pelo Hermes','cost estimated by Hermes'):T('custo estimado US$ 0 (modelo gratuito ou por assinatura)','estimated cost US$ 0 (free or subscription model)'))+(c.aprox?T('; parte com vínculo aproximado (execuções anteriores ao registro de início e fim)','; partly matched approximately (runs before start/end logging)'):'')+'</span>':'—');
+    const c=it.custo; add(T('Consumo ','Usage ')+P+' d',c?fmtTok(c.tokens)+' tokens · '+c.execucoes+T(' exec.',' runs')+(c.custo_usd>0?' · US$ '+c.custo_usd.toFixed(2):'')+varCustoTxt(it)+'<br><span style="color:var(--dim)">'+(c.custo_usd>0?T('custo estimado pelo Hermes','cost estimated by Hermes'):T('custo estimado US$ 0 (modelo gratuito ou por assinatura)','estimated cost US$ 0 (free or subscription model)'))+(c.aprox?T('; parte com vínculo aproximado (execuções anteriores ao registro de início e fim)','; partly matched approximately (runs before start/end logging)'):'')+'</span>':'—');
     if(it.cadencia_h){const dd=it.cadencia_h/24;add(T('Cadência','Cadence'),T('a cada ','every ')+(it.cadencia_h%24?it.cadencia_h+' h':dd+T(' dia'+(dd>1?'s':''),(it.dias_uteis?' business':'')+' day'+(dd>1?'s':'')))+(it.dias_uteis?T(' útil',''):'')+(atrasado(it)?' · <span style="color:var(--amber)">'+T('atrasado há ','late by ')+fmtAtraso(it.atrasado_s).toLowerCase()+'</span>':T(' · em dia',' · on time')))}
     if(it.status==='running')add(T('Rodando há','Running for'),mmss(it.elapsed_s||0)+' <span style="color:var(--dim)">('+T('limite ','limit ')+Math.round((it.timeout_s||1800)/60)+' min)</span>'+(it.sem_acao_s!=null?'<br>'+T('última ação há ','last action ')+mmss(it.sem_acao_s)+T('',' ago')+(it.sem_acao_s>=300?' <span style="color:var(--amber)">'+T('sem ação: ferramenta demorando ou travado','no activity: slow tool or stuck')+'</span>':''):''));
     add(T('Última','Last'),it.last?`${fmtTs(it.last.ts)} · ${rel(it.last.ts)}<br>${T('código','exit code')} ${it.last.code}${it.last.dur!=null?T(' · durou ',' · took ')+fmtDur(it.last.dur):''}${it.last.fallback?' · fallback':''}${it.last.interrompida?' · <span style="color:var(--red)">'+T('interrompida (sem registro no log)','interrupted (not in the log)')+'</span>':''}`:'—');
@@ -239,6 +257,7 @@ function setLive(ok){const p=$('live');p.classList.toggle('off',!ok);p.querySele
 /* ---------- modo demonstração ---------- */
 function demo(s){
   $('demo').style.display='block';
+  if(ESTATICA&&!$('demo').dataset.online){$('demo').dataset.online=1;$('demo').innerHTML=T('DEMONSTRAÇÃO ONLINE · DADOS SIMULADOS · ','ONLINE DEMO · SIMULATED DATA · ')+'<a href="https://github.com/ToninhoRK/tRK-sala_de_operacoes#readme" target="_blank" rel="noopener">'+T('instale para ver os seus agentes','install it to see your own agents')+'</a>'}
   // usa os agentes de exemplo do pacote; com os dados reais (sem os exemplos) usa os primeiros agentes/cron da lista
   const ag=s.agents, A=(id,i)=>ag.find(x=>x.id===id)||ag[i]||null;
   const rot=A('rotina_exemplo',0), aud=A('auditoria_exemplo',1), con=A('consulta_exemplo',2), rel=A('relatorio_exemplo',3);
@@ -274,4 +293,5 @@ function demo(s){
     tendencia:Array.from({length:P},(_,i)=>({dia:dd(i),execucoes:i===P-1?14:B7[m7(i)],falhas:F7[m7(i)]})),custo_usd:Math.round(4.03*P/7*100)/100,manut:[...s.agents,...s.crons].filter(x=>x.manutencao).length};
   s.kpis.jobs_dados_desde=dd(0); s.kpis.aguardando=s.jarvis&&s.jarvis.aguardando?1:0;
   {const TD=s.kpis.tendencia,n=TD.reduce((a,x)=>a+x.execucoes,0),f=TD.reduce((a,x)=>a+x.falhas,0);s.kpis.sucesso={execucoes:n,falhas:f,pct:Math.round(1000*(n-f)/n)/10}}
+
 }

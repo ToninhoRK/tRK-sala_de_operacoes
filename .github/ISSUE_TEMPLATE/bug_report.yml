@@ -1,0 +1,59 @@
+name: 🐛 Bug report
+description: Algo não está funcionando como esperado na Sala de Operações
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por reportar! Antes, confira se o problema já está listado nas issues abertas.
+  - type: input
+    id: versao
+    attributes:
+      label: Versão da Sala
+      description: Veja em `VERSION` ou no rodapé da página (`versao` do `/api/state`)
+      placeholder: 1.3.1
+    validations:
+      required: true
+  - type: input
+    id: sistema
+    attributes:
+      label: Sistema
+      description: macOS, Linux ou Windows; versão
+      placeholder: macOS 27.2.1
+    validations:
+      required: true
+  - type: textarea
+    id: oque_acontece
+    attributes:
+      label: O que acontece
+      description: Descreva o problema com clareza
+    validations:
+      required: true
+  - type: textarea
+    id: como_reproduzir
+    attributes:
+      label: Como reproduzir
+      description: Passos para alguém conseguir ver o mesmo problema
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: O que você esperava
+    validations:
+      required: true
+  - type: textarea
+    id: provas
+    attributes:
+      label: Provas
+      description: Saída do `testes_servidor.py`, `testar_sala.py --rapido`, captura de tela com `?debug=1` ou `curl /api/state`. Nunca envie dados reais (e-mails, nomes, matrículas).
+  - type: checkboxes
+    id: termos
+    attributes:
+      label: Confirmações
+      options:
+        - label: Li as regras do projeto em CONTRIBUTING.md
+          required: true
+        - label: Não estou enviando dados reais da minha empresa
+          required: true

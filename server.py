@@ -17,35 +17,41 @@ from datetime import datetime, timedelta
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-HERMES = os.path.expanduser("~/.hermes")
-AGENTES = os.path.join(HERMES, "scripts", "agentes.json")
-LOGS = os.path.join(HERMES, "data", "agentes")
-JOBS = os.path.join(HERMES, "cron", "jobs.json")
-EXEC_DB = os.path.join(HERMES, "cron", "executions.db")
-STATE_DB = os.path.join(HERMES, "state.db")
-
+# Pasta de dados da Sala: --dados > SALA_DADOS > ~/.hermes > ~/.sala (sala_caminhos.py).
+from sala_caminhos import CAMINHOS, Caminhos
+import sala_ajustes
+from sala_caminhos import (   # noqa: E402
+    AGENTES as _AGENTES, LOGS as _LOGS, JOBS as _JOBS, EXEC_DB as _EXEC_DB,
+    STATE_DB as _STATE_DB, HIST_CRON as _HIST_CRON, MANUT as _MANUT,
+    CONFIG as _CONFIG, VIGIA as _VIGIA, SCRIPTS_DIR as _SCRIPTS_DIR,
+    VAULT_CONT as _VAULT_CONT, CLAUDE_USO as _CLAUDE_USO,
+    EQUIPE_JSON as _EQUIPE_JSON, RESUMO as _RESUMO, ALERTA_BASE as _ALERTA_BASE,
+)
+HERMES = CAMINHOS.HERMES
+ALERTA_BASE = CAMINHOS.ALERTA_BASE
+RESUMO = CAMINHOS.RESUMO
 # Sem Hermes neste computador (ex.: um colega que só quer ver o painel), usa os dados de exemplo da pasta exemplo/:
 # o painel abre com os agentes e jobs do setor, sem histórico de execuções (use ?demo=1 para simular estados).
 EXEMPLO = os.path.join(AQUI, "exemplo")
-# Só para o teste de cenários (testar_sala.py): catálogo, jobs e equipe fictícios, sem tocar nos arquivos reais
-AGENTES = os.environ.get("SALA_AGENTES") or AGENTES
-JOBS = os.environ.get("SALA_JOBS") or JOBS
-if not os.path.exists(AGENTES):
-    AGENTES = os.path.join(EXEMPLO, "agentes.json")
-if not os.path.exists(JOBS):
-    JOBS = os.path.join(EXEMPLO, "cron_jobs.json")
-# Histórico próprio da Sala para os jobs: o executions.db do Hermes guarda só as últimas ~1000 execuções (uns 2 dias, com os
-# jobs de 5 em 5 min). Gravado pelo vigia_sala.py a cada 5 min: só execuções que trabalharam (> 5 s), falharam ou recuperaram o job depois de uma falha, até 100 dias.
-HIST_CRON = os.environ.get("SALA_HIST_CRON") or os.path.join(HERMES, "data", "sala_historico_cron.jsonl")
-# Janelas de manutenção (manutencao.py): dentro da janela, falha e atraso não alarmam e não contam no índice de sucesso.
-MANUT = os.environ.get("SALA_MANUT") or os.path.join(HERMES, "data", "sala_manutencao.json")
-CONFIG = os.path.expanduser(os.environ.get("SALA_CONFIG", "~/.hermes/data/sala_config.json"))   # responsavel_padrao (opcional)
-# Sinal de vida do vigia_sala.py (gravado no início de cada rodada): parado há mais de 15 min = fonte com problema
-VIGIA = os.environ.get("SALA_VIGIA") or os.path.join(HERMES, "data", "sala_vigia.json")
+# Sobrescritas por variavel de ambiente (compatibilidade com testar_sala.py e quem precisa de arquivos separados)
+AGENTES = os.environ.get("SALA_AGENTES") or _AGENTES
+LOGS = os.environ.get("SALA_LOGS") or _LOGS
+JOBS = os.environ.get("SALA_JOBS") or _JOBS
+EXEC_DB = os.environ.get("SALA_EXEC_DB") or _EXEC_DB
+STATE_DB = os.environ.get("SALA_STATE_DB") or _STATE_DB
+# Historico proprio da Sala para os jobs: o executions.db do Hermes guarda so as ultimas ~1000 execucoes (uns 2 dias, com os
+# jobs de 5 em 5 min). Gravado pelo vigia_sala.py a cada 5 min: so execucoes que trabalharam (> 5 s), falharam ou recuperaram
+# o job depois de uma falha, ate 100 dias.
+HIST_CRON = os.environ.get("SALA_HIST_CRON") or _HIST_CRON
+# Janelas de manutencao (manutencao.py): dentro da janela, falha e atraso nao alarmam e nao contam no indice de sucesso.
+MANUT = os.environ.get("SALA_MANUT") or _MANUT
+CONFIG = os.environ.get("SALA_CONFIG") or _CONFIG   # responsavel_padrao (opcional)
+# Sinal de vida do vigia_sala.py (gravado no inicio de cada rodada): parado ha mais de 15 min = fonte com problema
+VIGIA = os.environ.get("SALA_VIGIA") or _VIGIA
 VIGIA_ATRASO_S = 900
-# Pasta onde o Hermes procura os scripts dos jobs e os prompts dos agentes: arquivo que sumiu daqui = falha certa na próxima rodada
-SCRIPTS_DIR = os.path.join(HERMES, "scripts")
-PERIODOS = (7, 15, 30, 60, 90)   # dias dos indicadores (tendência, índice de sucesso, consumo), escolhidos no CONFIGURAR
+# Pasta onde o Hermes procura os scripts dos jobs e os prompts dos agentes: arquivo que sumiu daqui = falha certa na proxima rodada
+SCRIPTS_DIR = os.environ.get("SALA_SCRIPTS_DIR") or _SCRIPTS_DIR
+PERIODOS = (7, 15, 30, 60, 90)   # dias dos indicadores (tendencia, indice de sucesso, consumo), escolhidos no CONFIGURAR
 
 # Layout da planta: gerado a partir de layout.json (setores) + agentes.json. Nada de agente novo fica de fora:
 # quem não casa com nenhum setor vai para a sala padrão ("NOVOS AGENTES").
@@ -165,7 +171,7 @@ def montar_layout(cat, cron_ids, equipe_ids=()):
             # toda sala ocupa a profundidade da linha ("h"); "hn" é a altura natural das estações (a sobra vira área de convivência)
             zonas.append({"id": z["id"], "title": z["titulo"], "x": round(x, 2), "y": round(y, 2), "w": round(w, 2), "h": round(prof, 2),
                           "hn": None if reuniao else round(hn, 2), "cols": cols, "rows": rows,
-                          "tipo": z.get("tipo", ""), "items": z["itens"]})
+                          "tipo": z.get("tipo", ""), "quadro": z.get("quadro"), "items": z["itens"]})
             x += w + GAP
         y += prof + CORREDOR
     prof_total = (y - CORREDOR) if zonas else 10
@@ -248,8 +254,32 @@ def rodando_agora():
 
 
 def pid_vivo(pid):
+    """O processo existe? Só consulta, nunca sinaliza. No Windows o os.kill(pid, 0) MANDARIA Ctrl+C (sinal 0 = CTRL_C_EVENT)
+    e interromperia o agente observado: lá a consulta é pela API do sistema (OpenProcess + GetExitCodeProcess)."""
     try:
-        os.kill(int(pid), 0)
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        try:
+            import ctypes
+            k32 = ctypes.windll.kernel32
+            h = k32.OpenProcess(0x1000, False, pid)        # PROCESS_QUERY_LIMITED_INFORMATION
+            if not h:
+                return False
+            try:
+                codigo = ctypes.c_ulong()
+                return bool(k32.GetExitCodeProcess(h, ctypes.byref(codigo))) and codigo.value == 259   # STILL_ACTIVE
+            finally:
+                k32.CloseHandle(h)
+        except Exception:
+            return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except PermissionError:        # existe, mas é de outro usuário
         return True
     except Exception:
         return False
@@ -259,8 +289,10 @@ EVENTOS_MAX_BYTES = 2_000_000   # lê só o fim do eventos.jsonl (cada execuçã
 
 
 def execucoes():
-    """Execuções gravadas pelo rodar_agente.py em eventos.jsonl (início e fim; desde a Fase 5, 15/10/2026).
-    Devolve {pid_t: {agente, ini, fim, codigo, duracao_s, modelo, sessoes, vivo}}. Arquivo ausente = lista vazia (executor antigo)."""
+    """Execucoes gravadas em eventos.jsonl (v1 do rodar_agente.py e v2 do sala_evento.py).
+    Devolve {chave: {agente, ini, fim, codigo, duracao_s, modelo, sessoes, vivo, pid, run}}.
+    v1: inicio/fim pareados pelo pid (chave pid_t). v2: start/end pareados pelo run (chave run_<run>).
+    Arquivo ausente = dicionario vazio (executor antigo)."""
     caminho = os.path.join(LOGS, "eventos.jsonl")
     out = {}
     try:
@@ -274,23 +306,114 @@ def execucoes():
         problema("eventos.jsonl", "eventos.jsonl do executor ilegível: rodando/custo pelo método aproximado",
                  "executor eventos.jsonl unreadable: running/cost by the approximate method")
         return out
-    abertos = {}
+    # v2: start/end por run
+    abertos_v2 = {}
     for l in linhas:
         try:
             d = json.loads(l)
-            pid, t, ag = d["pid"], float(d["t"]), d["agente"]
         except Exception:
             continue
-        if d.get("ev") == "inicio":
-            k = "%s_%d" % (pid, t)
-            out[k] = {"agente": ag, "ini": t, "fim": None, "codigo": None, "duracao_s": None, "modelo": d.get("modelo"), "sessoes": [], "pid": pid}
-            abertos[pid] = k
-        elif d.get("ev") == "fim" and pid in abertos:
-            x = out[abertos.pop(pid)]
-            x.update(fim=t, codigo=d.get("codigo"), duracao_s=d.get("duracao_s"), sessoes=d.get("sessoes") or [], modelo=d.get("modelo") or x["modelo"])
+        if not isinstance(d, dict):
+            continue
+        if d.get("v") == 2:
+            ev, run = d.get("ev"), d.get("run")
+            if ev == "start" and run:
+                out["run_" + str(run)] = {
+                    "agente": d.get("agent"), "ini": float(d.get("t", 0)), "fim": None, "codigo": None,
+                    "duracao_s": None, "modelo": d.get("model"), "sessoes": [],
+                    "pid": d.get("pid"), "run": run, "v2": True,
+                }
+                abertos_v2[run] = "run_" + str(run)
+            elif ev == "end" and run in abertos_v2:
+                k = abertos_v2.pop(run)
+                x = out[k]
+                x.update(fim=float(d.get("t", 0)), codigo=d.get("code"),
+                         duracao_s=d.get("duration_s"), modelo=d.get("model") or x["modelo"],
+                         tokens_in=d.get("tokens_in"), tokens_out=d.get("tokens_out"), cost_usd=d.get("cost_usd"),
+                         session=d.get("session"), host=d.get("host"))
+    # v1: inicio/fim por pid (compatibilidade com o rodar_agente.py antigo)
+    abertos_v1 = {}
+    for l in linhas:
+        try:
+            d = json.loads(l)
+        except Exception:
+            continue
+        if not isinstance(d, dict):
+            continue
+        if d.get("v") != 2:
+            try:
+                pid, t, ag = d["pid"], float(d["t"]), d["agente"]
+            except Exception:
+                continue
+            if d.get("ev") == "inicio":
+                k = "%s_%d" % (pid, t)
+                out[k] = {"agente": ag, "ini": t, "fim": None, "codigo": None, "duracao_s": None,
+                          "modelo": d.get("modelo"), "sessoes": [], "pid": pid, "run": None, "v2": False}
+                abertos_v1[pid] = k
+            elif d.get("ev") == "fim" and pid in abertos_v1:
+                x = out[abertos_v1.pop(pid)]
+                x.update(fim=t, codigo=d.get("codigo"), duracao_s=d.get("duracao_s"),
+                         sessoes=d.get("sessoes") or [], modelo=d.get("modelo") or x["modelo"])
     for x in out.values():
-        x["vivo"] = x["fim"] is None and pid_vivo(x["pid"])
+        pid = x.get("pid")
+        if x.get("v2"):
+            x["vivo"] = x["fim"] is None and _heartbeat_recente(x.get("run"))
+        else:
+            x["vivo"] = x["fim"] is None and pid_vivo(pid)
     return out
+
+
+def _heartbeat_recente(run, janela_s=10 * 60):
+    """Uma execucao v2 esta viva se houve heartbeat nos ultimos janela_s segundos (padrao 10 min)."""
+    caminho = os.path.join(LOGS, "eventos.jsonl")
+    agora = time.time()
+    try:
+        with open(caminho, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - EVENTOS_MAX_BYTES))
+            linhas = f.read().decode("utf8", "ignore").splitlines()
+    except Exception:
+        return False
+    for l in reversed(linhas):
+        try:
+            d = json.loads(l)
+        except Exception:
+            continue
+        if d.get("v") == 2 and d.get("ev") == "heartbeat" and d.get("run") == run:
+            return agora - float(d.get("t", 0)) <= janela_s
+        # para nao varrer o arquivo inteiro: se achou um evento mais antigo que a janela para este run, para
+        if d.get("v") == 2 and d.get("run") == run and float(d.get("t", 0)) < agora - janela_s:
+            break
+    return False
+
+
+def aguardando_voce(janela_s=60 * 60):
+    """Agentes em estado 'aguardando voce': tem um evento 'waiting' sem 'resumed'
+    posterior nos ultimos janela_s segundos (padrao 1 h). Devolve set de nomes."""
+    caminho = os.path.join(LOGS, "eventos.jsonl")
+    agora = time.time()
+    try:
+        with open(caminho, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - EVENTOS_MAX_BYTES))
+            linhas = f.read().decode("utf8", "ignore").splitlines()
+    except Exception:
+        return set()
+    esperando = {}
+    resumiu = set()
+    for l in linhas:
+        try:
+            d = json.loads(l)
+        except Exception:
+            continue
+        if not isinstance(d, dict) or d.get("v") != 2:
+            continue
+        ev, ag, run = d.get("ev"), d.get("agent"), d.get("run")
+        if ev == "waiting" and ag and run:
+            esperando[run] = ag
+        elif ev == "resumed" and run:
+            resumiu.add(run)
+    return {ag for run, ag in esperando.items() if run not in resumiu}
 
 
 def uteis_s(a, b):
@@ -311,14 +434,16 @@ def ts_local(t):
     return datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M:%S")
 
 
-_CUSTO = {}     # dias -> (instante do cálculo, custos)
+_CUSTO = {}     # (dias, desde_dias) -> (instante do cálculo, custos)
 
 
-def custos(hist, exs, dias=7):
-    """Custo (US$ estimado pelo Hermes), tokens e duração por agente nos últimos `dias`, da tabela sessions do state.db (só números).
+def custos(hist, exs, dias=7, desde_dias=0):
+    """Custo (US$ estimado pelo Hermes), tokens e duração por agente na janela [agora-(dias+desde_dias) d, agora-desde_dias d],
+    da tabela sessions do state.db (só números). desde_dias=0 = período atual; desde_dias=dias = período anterior de igual duração.
     Exato quando a execução tem evento com o id das sessões; para execuções sem evento (executor antigo) o vínculo é aproximado:
     sessão 'oneshot' do mesmo modelo que terminou até 5 s antes do registro no log e começou no máximo 35 min antes."""
-    corte = time.time() - dias * 86400
+    fim = time.time() - desde_dias * 86400
+    corte = fim - dias * 86400
     r = {}
     if not os.path.exists(STATE_DB):
         return r
@@ -344,12 +469,13 @@ def custos(hist, exs, dias=7):
         x["aprox"] = x["aprox"] or aprox
     com_evento = []
     for x in exs.values():
-        if x["fim"] and x["fim"] >= corte:
+        f = x["fim"]
+        if f and corte <= f < fim:
             soma(x["agente"], x["sessoes"], False)
-            com_evento.append((x["agente"], x["fim"]))
+            com_evento.append((x["agente"], f))
     for e in hist:      # cronológico: cada execução fica com as sessões dela antes que a seguinte do mesmo modelo as alcance
         t = time.mktime(time.strptime(e["ts"], "%Y-%m-%d %H:%M:%S"))
-        if t < corte or any(a == e["agent"] and abs(f - t) <= 10 for a, f in com_evento):
+        if t < corte or t >= fim or any(a == e["agent"] and abs(f - t) <= 10 for a, f in com_evento):
             continue
         ids = [k for k, v in sess.items() if k not in usadas and v[0] == e["model"] and v[2] and v[2] <= t + 5 and v[1] >= t - 2100]
         soma(e["agent"], ids, True)
@@ -383,51 +509,170 @@ def tendencia(hist, crons_execs, dias=7):
 ATRASO_TOLERANCIA_S = 600   # job com a próxima rodada vencida há mais de 10 min (e sem estar rodando) = ATRASADO: o agendador não disparou (Mac dormindo, gateway parado)
 ANTIGO_S = 7 * 86400        # agente sem rodar há mais de 7 dias: selo apagado (não é falha; agentes sob demanda passam dias parados)
 
-# Recursos do Mac e do servidor: leitura cara (~28 ms de ps -A), cacheada 10 s
-_RECURSOS = {"t": 0, "d": None}
+# Recursos do computador e do servidor da Sala (ao lado do fps, sem cor, fora do veredito): leitura cacheada 10 s.
+# macOS: ps/memory_pressure/pmset; Linux: /proc e /sys; outro sistema (Windows): o que não der para ler vira None ("—" na tela).
+_RECURSOS = {"t": 0, "d": None, "cpu_proc": None, "cpu_host": None}
+_SLO_CFG = {"t": 0.0, "v": None}
+RECURSOS_TTL_S = 10
+
+
+def _rodar(cmd, timeout=5):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout or ""
+    except Exception:
+        return ""
+
+
+def _host_cpu_pct():
+    """% de CPU do computador inteiro (0-100, média dos núcleos)."""
+    ncpu = os.cpu_count() or 1
+    if sys.platform.startswith("linux"):
+        try:
+            with open("/proc/stat") as f:
+                v = [int(x) for x in f.readline().split()[1:]]
+            ocioso, total = v[3] + (v[4] if len(v) > 4 else 0), sum(v)
+            ant, _RECURSOS["cpu_host"] = _RECURSOS["cpu_host"], (ocioso, total)
+            if ant and total > ant[1]:
+                return round(100.0 * (1 - (ocioso - ant[0]) / (total - ant[1])), 1)
+        except Exception:
+            pass
+        return None
+    if sys.platform == "darwin":
+        txt = _rodar(["ps", "-A", "-o", "%cpu="])
+        soma = 0.0
+        for x in txt.split():
+            try:
+                soma += float(x.replace(",", "."))
+            except ValueError:
+                pass
+        return round(min(100.0, soma / ncpu), 1) if txt else None
+    return None
+
+
+def _host_mem_pct():
+    """% de memória em uso. macOS: pressão de memória (100 - "free percentage" do memory_pressure, a mesma do Monitor de
+    Atividade; o "usado" do top fica sempre perto do total por causa do cache). Linux: 1 - MemAvailable/MemTotal."""
+    if sys.platform == "darwin":
+        m = re.search(r"free percentage:\s*(\d+)", _rodar(["memory_pressure"]))   # sem opção: o -q não existe neste macOS
+        return 100 - int(m.group(1)) if m else None
+    if sys.platform.startswith("linux"):
+        try:
+            mi = {}
+            with open("/proc/meminfo") as f:
+                for l in f:
+                    k, v = l.split(":", 1)
+                    mi[k] = int(v.split()[0])
+            return round(100.0 * (1 - mi["MemAvailable"] / mi["MemTotal"]), 1)
+        except Exception:
+            return None
+    return None
+
+
+def bateria_ler(txt=None):
+    """(pct, carregando) ou (None, None) sem bateria. macOS: pmset -g batt ("discharging" contém "charging": olha o que vem
+    depois do ";"); Linux: /sys/class/power_supply/BAT*."""
+    if txt is None and sys.platform.startswith("linux"):
+        try:
+            import glob
+            for b in sorted(glob.glob("/sys/class/power_supply/BAT*")):
+                with open(b + "/capacity") as f:
+                    pct = int(f.read().strip())
+                with open(b + "/status") as f:
+                    st = f.read().strip().lower()
+                return pct, st in ("charging", "full", "not charging")
+        except Exception:
+            pass
+        return None, None
+    if txt is None:
+        if sys.platform != "darwin":
+            return None, None
+        txt = _rodar(["pmset", "-g", "batt"])
+    m = re.search(r"(\d{1,3})%", txt)
+    if not m:
+        return None, None
+    tl = txt.lower()
+    return int(m.group(1)), ("ac power" in tl) or re.search(r";\s*(charging|charged|finishing charge)", tl) is not None
+
+
+def _servidor_cpu_pct():
+    """% de UM núcleo usado por este processo desde a leitura anterior (os.times)."""
+    t = os.times()
+    agora, usado = time.time(), t.user + t.system
+    ant, _RECURSOS["cpu_proc"] = _RECURSOS["cpu_proc"], (agora, usado)
+    if ant and agora > ant[0]:
+        return round(100.0 * (usado - ant[1]) / (agora - ant[0]), 1)
+    return None
+
+
+def _servidor_mem_mb():
+    """Memória residente ATUAL do servidor em MB (não o pico)."""
+    if sys.platform.startswith("linux"):
+        try:
+            with open("/proc/self/status") as f:
+                for l in f:
+                    if l.startswith("VmRSS:"):
+                        return round(int(l.split()[1]) / 1024, 1)
+        except Exception:
+            return None
+    txt = _rodar(["ps", "-o", "rss=", "-p", str(os.getpid())]).strip() if sys.platform == "darwin" else ""
+    return round(int(txt) / 1024, 1) if txt.isdigit() else None
 
 
 def recursos_ler():
-    """Lê CPU/memória do Mac e do servidor, com cache de 10 s (não encare cada poll)."""
+    """CPU/memória do computador e do servidor, bateria. Cache de 10 s (não encarece cada poll). Campos neutros host_*;
+    os mac_* continuam com o mesmo valor para quem já lê a API."""
     agora = time.time()
-    if _RECURSOS["d"] is not None and agora - _RECURSOS["t"] < 10:
+    if _RECURSOS["d"] is not None and agora - _RECURSOS["t"] < RECURSOS_TTL_S:
         return _RECURSOS["d"]
+    d = {}
+    for k, f in (("host_cpu_pct", _host_cpu_pct), ("host_mem_pct", _host_mem_pct),
+                 ("servidor_cpu_pct", _servidor_cpu_pct), ("servidor_mem_mb", _servidor_mem_mb)):
+        try:
+            d[k] = f()
+        except Exception:
+            d[k] = None
     try:
-        import subprocess
-        # carga média 1 min do macOS, como % de um núcleo (loadavg / ncpu * 100)
-        ncpu = os.cpu_count() or 1
-        load1 = os.getloadavg()[0]
-        servidor_cpu = round(load1 / ncpu * 100, 1)
-        # RSS do servidor (este processo)
-        import resource
-        servidor_mem = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024 * 1024), 1)
-        # CPU do Mac inteiro: soma de %cpu de todos os processos
-        ps = subprocess.run(["ps", "-A", "-o", "%cpu="], capture_output=True, text=True, timeout=5)
-        mac_cpu = round(sum(float(x) for x in ps.stdout.split() if x), 1)
-        # pressão de memória do macOS (derivada de vm_stat / memory_pressure)
-        mp = subprocess.run(["memory_pressure", "-q"], capture_output=True, text=True, timeout=5)
-        m = re.search(r"System-wide memory free percentage:\s*(\d+)", mp.stdout)
-        mac_mem = round(100 - (int(m.group(1)) if m else 0), 1)
-        # bateria
-        batt = subprocess.run(["pmset", "-g", "batt"], capture_output=True, text=True, timeout=5)
-        bp = re.search(r"(\d+)%.*; (charging|discharging)", batt.stdout)
-        bateria_pct = int(bp.group(1)) if bp else None
-        bateria_carregando = bool(bp and bp.group(2) == "charging") if bp else None
-        d = {
-            "servidor_cpu_s": servidor_cpu,
-            "servidor_mem_mb": servidor_mem,
-            "mac_cpu_pct": mac_cpu,
-            "mac_mem_pressao_pct": mac_mem,
-            "mac_bateria_pct": bateria_pct,
-            "mac_bateria_carregando": bateria_carregando,
-        }
+        d["host_bateria_pct"], d["host_bateria_carregando"] = bateria_ler()
     except Exception:
-        d = {"servidor_cpu_s": None, "servidor_mem_mb": None,
-             "mac_cpu_pct": None, "mac_mem_pressao_pct": None,
-             "mac_bateria_pct": None, "mac_bateria_carregando": None}
-    _RECURSOS["t"] = agora
-    _RECURSOS["d"] = d
+        d["host_bateria_pct"] = d["host_bateria_carregando"] = None
+    d.update({"servidor_cpu_s": d["servidor_cpu_pct"], "mac_cpu_pct": d["host_cpu_pct"], "mac_mem_pressao_pct": d["host_mem_pct"],
+              "mac_bateria_pct": d["host_bateria_pct"], "mac_bateria_carregando": d["host_bateria_carregando"]})
+    _RECURSOS["t"], _RECURSOS["d"] = agora, d
     return d
+
+
+def slo_meta(nome):
+    """Meta de sucesso (pct) de um job: de sala_config.json (chave slo_pct_por_job, número ou dicionário) ou 95 fixo."""
+    agora = time.time()
+    if _SLO_CFG["v"] is None or agora - _SLO_CFG["t"] > 60:
+        try:
+            cfg = ler_json(CONFIG)
+        except Exception:
+            cfg = {}
+        sp = cfg.get("slo_pct_por_job", {})
+        if isinstance(sp, (int, float)):
+            sp = {"default": float(sp)}
+        elif not isinstance(sp, dict):
+            sp = {}
+        _SLO_CFG["v"] = {str(k): float(v) for k, v in sp.items()}
+        _SLO_CFG["t"] = agora
+    sp = _SLO_CFG["v"]
+    return sp.get(nome, sp.get("default", 95))
+
+
+def ts_epoch(s):
+    """Epoch de "AAAA-MM-DD HH:MM[:SS]" (hora local) ou ISO; None se vazio/ilegível."""
+    if not s or not isinstance(s, str):
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return time.mktime(time.strptime(s[:19], fmt))
+        except ValueError:
+            pass
+    try:
+        return iso_epoch(s)
+    except Exception:
+        return None
 
 
 def iso_epoch(s):
@@ -461,6 +706,38 @@ def _jobs_ocultos():
     except Exception:
         return set()
 JOBS_OCULTOS = _jobs_ocultos()
+_AJ = {"mtime": None}
+
+
+def aplicar_ajustes(forcar=False):
+    """Aplica os ajustes da tela (AJUSTES DA SALA, gravados no sala_config.json): tempos de alerta, jobs ocultos e meta de SLO.
+    Relê só quando o arquivo muda (mtime). Sem o arquivo, ficam os padrões do código."""
+    global ATRASO_TOLERANCIA_S, SEM_ACAO_S, ANTIGO_S, VIGIA_ATRASO_S, JOBS_OCULTOS
+    try:
+        mt = os.path.getmtime(CONFIG)
+    except OSError:
+        mt = 0
+    if not forcar and _AJ["mtime"] == mt:
+        return
+    v = sala_ajustes.valores(CONFIG)
+    ATRASO_TOLERANCIA_S = v["atraso_tolerancia_min"] * 60
+    SEM_ACAO_S = v["sem_acao_min"] * 60
+    ANTIGO_S = v["antigo_dias"] * 86400
+    VIGIA_ATRASO_S = v["vigia_parado_min"] * 60
+    JOBS_OCULTOS = set(v["jobs_ocultos"])
+    _SLO_CFG["v"] = None
+    _AJ["mtime"] = mt
+
+
+def jobs_nomes_todos():
+    """Nomes de todos os jobs do cron (inclusive os ocultos), para a tela AJUSTES DA SALA."""
+    try:
+        j = ler_json(JOBS)
+        jobs = j["jobs"] if isinstance(j, dict) and "jobs" in j else j
+    except Exception:
+        return []
+    return sorted({str(x.get("name")) for x in jobs if isinstance(x, dict) and x.get("name")
+                   and not str(x.get("name")).startswith("avulso-")}) if isinstance(jobs, list) else []
 
 def cron_hist_sala():
     """Execuções de jobs guardadas pela própria Sala (vigia_sala.py): {job_id: [execução, ...]}. Sem o arquivo = vazio."""
@@ -1111,6 +1388,7 @@ def indice_geral(agentes, crons, cat, falhas_fora=0):
 
 
 def estado(dias=7):
+    aplicar_ajustes()
     agora = datetime.now()
     hoje = agora.strftime("%Y-%m-%d")
     try:
@@ -1144,10 +1422,13 @@ def estado(dias=7):
     for e in hist:
         por.setdefault(e["agent"], []).append(e)
     agentes = []
+    esperando = aguardando_voce()
     for nome, a in cat.items():
         h = por.get(nome, [])
         ult = h[-1] if h else None
-        if nome in rod:
+        if nome in esperando:
+            st = "waiting"
+        elif nome in rod:
             st = "running"
         elif ult and ult["code"] != 0:
             st = "error"
@@ -1159,7 +1440,8 @@ def estado(dias=7):
             "id": nome, "kind": "agent", "name": nome, "desc": a.get("descricao", ""),
             "model": a.get("modelo"), "provider": a.get("provedor"), "skills": a.get("skills", []),
             "max_turns": a.get("max_turns"),
-            "status": st, "elapsed_s": rod.get(nome),
+            "status": st, "aguardando": bool(nome in esperando),
+            "elapsed_s": rod.get(nome),
             "timeout_s": int(a.get("timeout_s", 1800)),
             "sem_acao_s": sem_acao(a.get("modelo"), time.time() - rod[nome]) if nome in rod else None,
             "last": ult,
@@ -1256,15 +1538,11 @@ def estado(dias=7):
         c["sucesso"] = indice_sucesso([(t, f) for t, f, _ in trab.get(c["id"], [])], jan.get(c["id"], []), corte)
         c["historico_desde"] = ts_local(min(t for t, _, _ in trab[c["id"]]))[:10] if trab.get(c["id"]) else None
     # SLO de sucesso de jobs (meta padrão 95%, pode vir de sala_config.json: slo_pct_por_job)
-    try:
-        slo_cfg = (ler_json(CONFIG) or {}).get("slo_pct_por_job") or {}
-    except Exception:
-        slo_cfg = {}
     slo_pct_padrao = 95
     for c in crons:
-        meta = slo_cfg.get(c["id"], slo_cfg.get(c["name"], slo_pct_padrao))
+        sp = slo_meta(c["name"])
         try:
-            meta = int(meta)
+            meta = int(sp)
         except Exception:
             meta = slo_pct_padrao
         su = c.get("sucesso") or {}
@@ -1276,8 +1554,8 @@ def estado(dias=7):
         c["slo_dentro"] = dentro
         if not dentro:
             problema("slo:" + c["id"],
-                     "SLO de %s: %s OK (meta %d%%)" % (c["name"], round(pct,1) if pct is not None else "—", meta),
-                     "SLO of %s: %s OK (meta %d%%)" % (c["name"], round(pct,1) if pct is not None else "—", meta))
+                     "SLO de %s: %s%% de sucesso (meta %d%%)" % (c["name"], str(round(pct, 1)).replace(".", ",") if pct is not None else "—", meta),
+                     "SLO of %s: %s%% success (target %d%%)" % (c["name"], round(pct, 1) if pct is not None else "—", meta))
     ini_dados = min((iso_epoch(e["started_at"]) for _, ex in execs_cron for e in ex if iso_epoch(e.get("started_at"))), default=None)
     dias_p = [(agora - timedelta(days=i)).date() for i in range(dias - 1, -1, -1)]
     por_nome = {jb.get("name"): jb for jb in CRON_JOBS_TODOS}
@@ -1315,29 +1593,6 @@ def estado(dias=7):
         c["duracao"] = {"media_s": round(sum(durs) / len(durs)) if durs else None, "max_s": round(max(durs)) if durs else None,
                         "n": len(durs), "soma_s": round(sum(durs))}
         c["ultimas"] = ult[-10:][::-1]
-    # SLO de sucesso de jobs (meta padrão 95%, pode vir de sala_config.json: slo_pct_por_job)
-    try:
-        slo_cfg = (ler_json(CONFIG) or {}).get("slo_pct_por_job") or {}
-    except Exception:
-        slo_cfg = {}
-    slo_pct_padrao = 95
-    for c in crons:
-        meta = slo_cfg.get(c["id"], slo_cfg.get(c["name"], slo_pct_padrao))
-        try:
-            meta = int(meta)
-        except Exception:
-            meta = slo_pct_padrao
-        su = c.get("sucesso") or {}
-        pct = su.get("pct")
-        orc = round((su.get("execucoes") or 0) * (100 - meta) / 100) if su.get("execucoes") else 0
-        dentro = (pct is None) or (pct >= meta)
-        c["slo_pct"] = meta
-        c["slo_orcamento_erros"] = orc
-        c["slo_dentro"] = dentro
-        if not dentro:
-            problema("slo:" + c["id"],
-                     "SLO de %s: %s OK (meta %d%%)" % (c["name"], round(pct,1) if pct is not None else "—", meta),
-                     "SLO of %s: %s OK (meta %d%%)" % (c["name"], round(pct,1) if pct is not None else "—", meta))
     falhas_log = [ep(e) for e in hist if e["code"] != 0]
     falhas_fora = sum(1 for c in crons if c["chama_agente"] for t, f, fim in trab.get(c["id"], [])
                       if f and t >= corte and not em_manutencao(jan.get(c["id"], []), t)
@@ -1349,15 +1604,29 @@ def estado(dias=7):
     for x in agentes + crons:
         x["responsavel"] = (cat.get(x["id"], {}).get("responsavel") if x["kind"] == "agent" else None) or resp_padrao
     tend, tend_por = tendencia(hist, [(cid, ex) for cid, ex in execs_cron if not any(c.get("chama_agente") for c in crons if c.get("id") == cid)], dias)
-    if agora_s - _CUSTO.get(dias, (0,))[0] > 60:   # custo muda devagar: recalcula no máximo 1x por minuto (por período)
-        _CUSTO[dias] = (agora_s, custos(hist, exs, dias))
-    cst = _CUSTO[dias][1]
+    # custo do período atual e do anterior de igual duração (muda devagar: recalcula no máximo 1x por minuto, por janela)
+    for desde in (0, dias):
+        if agora_s - _CUSTO.get((dias, desde), (0,))[0] > 60:
+            _CUSTO[(dias, desde)] = (agora_s, custos(hist, exs, dias, desde))
+    cst, cst_ant = _CUSTO[(dias, 0)][1], _CUSTO[(dias, dias)][1]
     nomes = (carregar_layout() or {}).get("nomes") or {}
     for x in agentes + crons:
         x["tendencia"] = tend_por.get(x["id"], [[0, 0]] * dias)
         x["titulo"] = nomes.get(x["id"]) or nomes.get(x.get("name"))
     for a in agentes:
         a["custo"] = cst.get(a["id"])
+        a["custo_anterior"] = cst_ant.get(a["id"])
+        atual = (a["custo"] or {}).get("custo_usd") or 0.0
+        antes = (a["custo_anterior"] or {}).get("custo_usd") or 0.0
+        a["custo_variacao_pct"] = round((atual - antes) / antes * 100, 1) if antes > 0 else None   # anterior 0: sem base
+    # idade do dado: segundos desde o último dado válido (último ts do log do agente / última execução do job; 0 se nunca teve)
+    for x in agentes + crons:
+        if x["kind"] == "agent":
+            cand = [(x.get("last") or {}).get("ts")]
+        else:   # a mais recente entre a última execução que trabalhou e a última checagem do jobs.json (as rápidas não entram em "ultimas")
+            cand = [x["ultimas"][0][0] if x.get("ultimas") else None, x.get("last_run")]
+        eps = [e for e in map(ts_epoch, cand) if e is not None]
+        x["dado_idade_s"] = max(0, int(agora_s - max(eps))) if eps else 0
     concluidos.sort(key=lambda e: e["ts"], reverse=True)
     em_execucao.sort(key=lambda e: e["ts"], reverse=True)
     feed = em_execucao + concluidos[:40]      # sempre: todos os em execução + os 40 concluídos mais recentes
@@ -1386,7 +1655,7 @@ def estado(dias=7):
     est_equipe, equipe = equipe_painel()
     layout, origem = montar_layout(cat, [c["id"] for c in crons], [p["id"] for p in est_equipe])
     jarvis = jarvis_estado()
-    kp["aguardando"] = 1 if jarvis.get("aguardando") else 0     # Jarvis com pergunta com opções esperando você (ATENÇÃO; som, sem e-mail)
+    kp["aguardando"] = sum(1 for x in agentes if x.get("aguardando")) + (1 if jarvis.get("aguardando") else 0)     # qualquer estacao esperando o usuario (ATENCAO; som, sem e-mail)
     for x in todos + [jarvis] + est_equipe:
         z, motivo = origem.get(x["id"], ("", ""))
         x["setor"], x["setor_motivo"] = z, motivo
@@ -1394,7 +1663,9 @@ def estado(dias=7):
     return {"now": agora.strftime("%Y-%m-%d %H:%M:%S"), "agents": agentes, "crons": crons,
             "feed": feed, "kpis": kp, "layout": layout, "sem_setor": sem_setor, "jarvis": jarvis, "claude_usage": claude_uso(), "vault": vault_painel(), "equipe_estacao": est_equipe, "equipe": equipe,
             "saude": list(SAUDE), "periodo_dias": dias, "atualizacao": atualizacao_info(), "versao": 6,
-            "recursos": recursos_ler()}
+            "recursos": recursos_ler(),
+            # catálogo de agentes vindo de exemplo/ (nenhum dado do usuário encontrado): a página explica isso na 1ª tela
+            "exemplo": os.path.dirname(os.path.abspath(AGENTES)) == os.path.abspath(EXEMPLO)}
 
 
 # Atividade AO VIVO (23/10/2026): a mesma leitura do modo ao vivo do terminal (rodar_agente.py). Raciocínio, respostas e
@@ -1536,7 +1807,8 @@ class H(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Security-Policy",
-                             "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'")
+                             "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+                             "img-src 'self' data: blob:")   # data:/blob: = texturas de parede do tema 3D (SVG rasterizado)
             self.send_header("X-Frame-Options", "DENY")
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
@@ -1557,6 +1829,57 @@ class H(BaseHTTPRequestHandler):
     def do_HEAD(self):
         self.do_GET()
 
+    def origem_ok(self):
+        """Gravação só pela própria página da Sala: mesmo host, Origin (se houver) igual ao endereço da Sala, cabeçalho
+        próprio X-Sala (um site de fora não consegue mandá-lo sem pré-verificação CORS, que a Sala nunca autoriza)."""
+        porta = self.server.server_address[1]
+        org = (self.headers.get("Origin") or "").lower()
+        if org and org not in ("http://127.0.0.1:%d" % porta, "http://localhost:%d" % porta):
+            return False
+        if (self.headers.get("Sec-Fetch-Site") or "same-origin").lower() not in ("same-origin", "none"):
+            return False
+        if self.headers.get("X-Sala") != "ajustes":
+            return False
+        return (self.headers.get("Content-Type") or "").lower().startswith("application/json")
+
+    def do_POST(self):
+        p = self.path.split("?")[0]
+        js = "application/json; charset=utf-8"
+        if not self.host_ok() or not self.origem_ok():
+            self._send(403, b'{"erros":["pedido recusado"]}', js)
+            return
+        if p != "/api/ajustes":
+            self._send(404, b'{"erros":["nao encontrado"]}', js)
+            return
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            n = -1
+        if not 0 < n <= 32768:
+            self._send(413, b'{"erros":["pedido grande demais"]}', js)
+            return
+        try:
+            entrada = json.loads(self.rfile.read(n).decode("utf8"))
+        except Exception:
+            self._send(400, json.dumps({"erros": ["JSON inválido"]}, ensure_ascii=False).encode("utf8"), js)
+            return
+        try:
+            limpo, erros = sala_ajustes.validar(entrada, jobs_nomes_todos())
+            if erros:
+                self._send(400, json.dumps({"erros": erros}, ensure_ascii=False).encode("utf8"), js)
+                return
+            antes = sala_ajustes.valores(CONFIG)
+            with _LOCK:
+                backup = sala_ajustes.gravar(CONFIG, limpo)
+                aplicar_ajustes(forcar=True)
+                _CACHE.clear()
+            depois = sala_ajustes.valores(CONFIG)
+            reiniciar = [k for k in sala_ajustes.REINICIAR if antes.get(k) != depois.get(k)]
+            resp = dict(ajustes_info(), ok=True, backup=os.path.basename(backup) if backup else None, reiniciar=reiniciar)
+            self._send(200, json.dumps(resp, ensure_ascii=False).encode("utf8"), js)
+        except Exception as e:
+            self._send(500, json.dumps({"erros": ["não gravou: %s" % e]}, ensure_ascii=False).encode("utf8"), js)
+
     def do_GET(self):
         p = self.path.split("?")[0]
         if not self.host_ok():
@@ -1576,6 +1899,8 @@ class H(BaseHTTPRequestHandler):
                 ag = (q.get("agent") or [""])[0]
                 modo = "vivo" if (q.get("modo") or [""])[0] == "vivo" else "resumo"
                 self._send(200, json.dumps(atividade(ag, modo), ensure_ascii=False).encode("utf8"), "application/json; charset=utf-8")
+            elif p == "/api/ajustes":
+                self._send(200, json.dumps(ajustes_info(), ensure_ascii=False).encode("utf8"), "application/json; charset=utf-8")
             elif p in ("/", "/index.html"):
                 self._send(200, pagina_montada(), "text/html; charset=utf-8")
             elif p == "/3d":                   # endereço antigo do protótipo 3D: o 3D agora é um tema da própria Sala
@@ -1595,6 +1920,13 @@ class H(BaseHTTPRequestHandler):
             self._send(500, ("erro: %s" % e).encode("utf8"), "text/plain; charset=utf-8")
 
 
+def ajustes_info():
+    """GET /api/ajustes: só as chaves editáveis (nunca e-mail, Agidesk, vault...), os padrões, os jobs e a porta em uso."""
+    return {"valores": sala_ajustes.valores(CONFIG), "padroes": sala_ajustes.padroes(), "jobs": jobs_nomes_todos(),
+            "porta_em_uso": PORTA_EM_USO[0], "porta_fixa": PORTA_EM_USO[1]}
+
+
+PORTA_EM_USO = [None, False]   # [porta, veio da linha de comando (aí o ajuste sala_porta não vale)]
 WEB = os.path.join(AQUI, "web")        # CSS e JS da página (index.html), inclusive o tema 3D e o Three.js
 TIPOS_WEB = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".html": "text/html; charset=utf-8",
              ".svg": "image/svg+xml", ".png": "image/png", ".txt": "text/plain; charset=utf-8"}
@@ -1617,6 +1949,16 @@ def pagina_montada():
     def js(m):
         txt = conteudo(m.group(1))
         return m.group(0) if txt is None else "<script>\n" + txt + "\n//# sourceURL=" + m.group(1) + "\n</script>"
+    try:                                   # subtítulo do cabeçalho: chaves opcionais subtitulo / subtitulo_en do sala_config.json
+        cfg = ler_json(CONFIG)
+    except Exception:
+        cfg = {}
+    if isinstance(cfg, dict) and cfg.get("subtitulo"):
+        from html import escape
+        pt = escape(str(cfg["subtitulo"]))
+        en = escape(str(cfg.get("subtitulo_en") or cfg["subtitulo"]))
+        html = html.replace('<small id="subtitulo" data-en="AI agents">Agentes de I.A.</small>',
+                            '<small id="subtitulo" data-en="%s">%s</small>' % (en, pt), 1)
     html = re.sub(r'<link rel="stylesheet" href="(/web/[^"]+\.css)">', css, html)
     html = re.sub(r'<script src="(/web/[^"]+\.js)"></script>', js, html)
     return html.encode("utf8")
@@ -1631,9 +1973,100 @@ def arquivo_web(caminho):
     return alvo
 
 
+def exportar_demo(pasta):
+    """Grava em `pasta` a demonstracao online (GitHub Pages, ou abrir o index.html direto): a pagina unica com um /api/state
+    de EXEMPLO embutido (window.SALA_ESTATICA) e o Three.js do tema 3D ao lado. Recusa se o catalogo nao for o de exemplo/:
+    rode com HOME vazio (HOME=$(mktemp -d) python3 server.py --exportar-demo docs/demo), senao sairiam dados reais."""
+    import shutil, re
+    s = estado(7)
+    if not s.get("exemplo"):
+        sys.exit("recusado: o catalogo de agentes nao eh o de exemplo/ (%s). Rode com HOME vazio para nao publicar dados reais." % AGENTES)
+    # 0.4: o layout e os jobs tambem devem ser os de exemplo (sem nomes internos da empresa)
+    try:
+        lay = ler_json(LAYOUT_JSON)
+    except Exception:
+        lay = {}
+    def _tem_interno(obj, onde):
+        txt = json.dumps(obj, ensure_ascii=False)
+        achados = []
+        for t in ("govti-", "GOVERNANCA", "Herval", "HERVAL", "@herval", "/Users/", "OneDrive", "SharePoint", "romolo", "klein"):
+            if t.lower() in txt.lower():
+                achados.append(t)
+        if achados:
+            print("TERMO INTERNO em %s: %s" % (onde, ", ".join(achados)))
+        return bool(achados)
+    interno = False
+    if _tem_interno(lay, "layout.json"):
+        interno = True
+    # jobs: conferir os nomes no arquivo de jobs usado pelo servidor
+    try:
+        jobs = ler_json(JOBS)
+        for jb in (jobs.get("jobs") or []):
+            nome = jb.get("name") or ""
+            if "govti" in nome.lower() or _tem_interno(jb, "jobs.json item " + nome):
+                interno = True
+    except Exception:
+        pass
+    if interno:
+        sys.exit("recusado: layout.json ou jobs.json contam nomes internos da empresa. Gere a demo a partir da pasta do repositorio com HOME vazio.")
+    s["atualizacao"] = {"nova": False}
+    s["recursos"] = {}
+    dados = json.dumps(s, ensure_ascii=False).replace("</", "<\\/")
+    html = pagina_montada().decode("utf8").replace("<script>", "<script>window.SALA_ESTATICA=%s;</script>\n<script>" % dados, 1)
+    # varredura final por termos proibidos no HTML que vai publicar
+    proibidos = re.compile(r"(herval|romolo|klein|@herval|/users/|onedrive|sharepoint|sk-[a-z0-9]{20,}|akia|ghp_)", re.I)
+    m = proibidos.search(html)
+    if m:
+        sys.exit("recusado: termo proibido na pagina de demo: %r" % m.group(0))
+    os.makedirs(os.path.join(pasta, "web", "vendor"), exist_ok=True)
+    with open(os.path.join(pasta, "index.html"), "w", encoding="utf8") as f:
+        f.write(html)
+    destino = os.path.join(pasta, "web", "vendor", "three")
+    shutil.rmtree(destino, ignore_errors=True)
+    shutil.copytree(os.path.join(WEB, "vendor", "three"), destino)
+    open(os.path.join(pasta, ".nojekyll"), "w").close()
+    print("demonstracao gravada em %s (%d KB)" % (pasta, len(html) // 1024))
+
+
 if __name__ == "__main__":
-    porta = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
-    print("Sala de Operações em http://127.0.0.1:%d" % porta, flush=True)
+    import argparse
+    ap = argparse.ArgumentParser(description="Sala de Operacoes - servidor local, somente leitura")
+    ap.add_argument("porta", nargs="?", type=int, default=None, help="porta TCP (padrao: sala_porta do sala_config.json ou 8765)")
+    ap.add_argument("--dados", metavar="PASTA", help="pasta de dados da Sala (padrao: SALA_DADOS, ~/.hermes ou ~/.sala)")
+    ap.add_argument("--versao", action="store_true", help="mostra a versao e sai")
+    ap.add_argument("--exportar-demo", metavar="PASTA", help="gera a demonstracao online em PASTA e sai")
+    ap.add_argument("--checar", action="store_true", help="teste de fumaca: imprime o que a Sala encontra e sai")
+    args = ap.parse_args()
+    porta = args.porta or sala_ajustes.valores(CONFIG)["sala_porta"]
+    if args.exportar_demo:
+        exportar_demo(args.exportar_demo)
+        sys.exit(0)
+    if args.versao:
+        print(open(os.path.join(AQUI, "VERSION"), encoding="utf8").read().strip())
+        sys.exit(0)
+    if args.checar:
+        print("Sala de Operacoes %s" % open(os.path.join(AQUI, "VERSION"), encoding="utf8").read().strip())
+        print("pasta de dados: %s" % CAMINHOS.HERMES)
+        print("catalogo: %s (%s)" % (AGENTES, "existe" if os.path.exists(AGENTES) else "NAO EXISTE"))
+        print("jobs: %s (%s)" % (JOBS, "existe" if os.path.exists(JOBS) else "NAO EXISTE"))
+        print("eventos: %s" % (os.path.join(LOGS, "eventos.jsonl")))
+        print("vigia: %s" % (os.path.exists(VIGIA) and "sinal de vida recente" or "sem sinal"))
+        print("servidor: escutaria em 127.0.0.1:%d" % porta)
+        sys.exit(0)
+    if args.dados:
+        CAMINHOS = Caminhos(dados=args.dados)
+        # reaplica os caminhos globais para a nova pasta
+        globals().update(
+            AGENTES=CAMINHOS.AGENTES, LOGS=CAMINHOS.LOGS, JOBS=CAMINHOS.JOBS,
+            EXEC_DB=CAMINHOS.EXEC_DB, STATE_DB=CAMINHOS.STATE_DB,
+            HIST_CRON=CAMINHOS.HIST_CRON, MANUT=CAMINHOS.MANUT, CONFIG=CAMINHOS.CONFIG,
+            VIGIA=CAMINHOS.VIGIA, SCRIPTS_DIR=CAMINHOS.SCRIPTS_DIR,
+            HERMES=CAMINHOS.HERMES, ALERTA_BASE=CAMINHOS.ALERTA_BASE, RESUMO=CAMINHOS.RESUMO,
+        )
+    if args.dados and not args.porta:
+        porta = sala_ajustes.valores(CONFIG)["sala_porta"]
+    PORTA_EM_USO[0], PORTA_EM_USO[1] = porta, bool(args.porta)
+    print("Sala de Operacoes em http://127.0.0.1:%d (dados: %s)" % (porta, CAMINHOS.HERMES), flush=True)
     BUSCAR_VERSAO = True
-    H.request_queue_size = 64               # fila de escuta: 20 requisições simultâneas não falham (P9)
+    H.request_queue_size = 64               # fila de escuta: 20 requisicoes simultaneas nao falham (P9)
     ThreadingHTTPServer(("127.0.0.1", porta), H).serve_forever()

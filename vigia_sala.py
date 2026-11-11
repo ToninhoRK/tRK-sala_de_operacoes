@@ -26,12 +26,15 @@ Arquivos de teste: SALA_HIST_CRON, SALA_ALERTA_BASE, SALA_CONFIG, SALA_AGENTES, 
 Sala de Operações watcher: keeps a 100-day job history (the Hermes database keeps ~2 days) and e-mails state changes.
 """
 import json
+import re
 import os
 import shutil
+import smtplib
 import sqlite3
 import subprocess
 import sys
 import time
+import urllib.request
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 
@@ -120,7 +123,12 @@ def config_email():
     if not para or any(c in para for c in ",; "):
         raise SystemExit("alerta_email.para precisa ser UM endereço de e-mail (%s)" % server.CONFIG)
     return {"para": para, "de": e.get("de") or para, "conta": e.get("conta_himalaya"),
-            "himalaya": e.get("himalaya") or shutil.which("himalaya") or "/opt/homebrew/bin/himalaya"}
+            "himalaya": e.get("himalaya") or shutil.which("himalaya") or "/opt/homebrew/bin/himalaya",
+            "smtp_host": e.get("smtp_host"), "smtp_porta": int(e.get("smtp_porta") or 0) or None,
+            "smtp_usuario": e.get("smtp_usuario"),
+            "smtp_senha": os.environ.get(e.get("smtp_senha_env") or "") or e.get("smtp_senha"),
+            "smtp_tls": bool(e.get("smtp_tls")),
+            "alerta_webhook": e.get("alerta_webhook") or None}
 
 
 def foto(s):
@@ -198,16 +206,69 @@ def mensagem(ev, b):
     return "[Sala] %s: %s" % (grave, nome), "\n".join(linhas) + "\n"
 
 
-def enviar(cfg, assunto, corpo):
+def enviar_smtp(cfg, assunto, corpo):
+    """Envio por SMTP (biblioteca padrao) quando ha bloco smtp na configuracao. Um destinatario so."""
+    host = cfg.get("smtp_host")
+    if not host:
+        return False, "sem smtp_host na configuracao"
+    porta = cfg.get("smtp_porta") or 587
+    usuario = cfg.get("smtp_usuario")
+    senha = cfg.get("smtp_senha")
+    usar_tls = cfg.get("smtp_tls")
+    try:
+        with smtplib.SMTP(host, porta, timeout=30) as s:
+            if usar_tls:
+                s.starttls()
+            if usuario and senha:
+                s.login(usuario, senha)
+            s.send_message(correio(cfg, assunto, corpo))
+        return True, ""
+    except Exception as e:
+        return False, str(e)[:300]
+
+
+def correio(cfg, assunto, corpo):
+    from email.message import EmailMessage
     m = EmailMessage()
     m["From"], m["To"], m["Subject"] = cfg["de"], cfg["para"], assunto
     m.set_content(corpo)
-    cmd = [cfg["himalaya"]] + (["--account", cfg["conta"]] if cfg["conta"] else []) + ["message", "send"]
+    return m
+
+
+def enviar_webhook(cfg, assunto, corpo):
+    """Webhook de alerta (um destino: Slack, Teams, ntfy ou JSON simples). Um destinatario so."""
+    url = cfg.get("alerta_webhook")
+    if not url:
+        return False, "sem alerta_webhook na configuracao"
+    import urllib.request, urllib.error
+    payload = {"sala": "Sala de Operações", "assunto": assunto, "corpo": corpo, "quando": time.time()}
+    dados = json.dumps(payload).encode("utf8")
+    req = urllib.request.Request(url, data=dados, headers={"Content-Type": "application/json"}, method="POST")
     try:
-        r = subprocess.run(cmd, input=m.as_bytes(), capture_output=True, timeout=120)
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return r.status < 300, "HTTP %d" % r.status
     except Exception as e:
-        return False, str(e)
-    return r.returncode == 0, (r.stderr or r.stdout).decode("utf8", "ignore").strip()[:300]
+        return False, str(e)[:300]
+
+
+def enviar(cfg, assunto, corpo):
+    """E-mail (himalaya ou SMTP) e, se configurado, webhook. Retorna ok do e-mail."""
+    ok = True; msg = ""
+    if cfg.get("smtp_host"):
+        ok, msg = enviar_smtp(cfg, assunto, corpo)
+    else:
+        m = correio(cfg, assunto, corpo)
+        cmd = [cfg["himalaya"]] + (["--account", cfg["conta"]] if cfg["conta"] else []) + ["message", "send"]
+        try:
+            r = subprocess.run(cmd, input=m.as_bytes(), capture_output=True, timeout=120)
+        except Exception as e:
+            return False, str(e)
+        ok = r.returncode == 0; msg = (r.stderr or r.stdout).decode("utf8", "ignore").strip()[:300]
+    # webhook adicional (nao impede o e-mail)
+    wh_ok, wh_msg = enviar_webhook(cfg, assunto, corpo)
+    if not wh_ok:
+        print("webhook: falhou (%s)" % wh_msg)
+    return ok, msg
 
 
 def sinal_de_vida(erro=None):
@@ -278,7 +339,74 @@ def enviar_resumo(cfg):
     return enviar(cfg, assunto, corpo) + (assunto,)
 
 
+def gateway_rodando():
+    """True se o LaunchAgent ai.hermes.gateway está ativo (launchctl); fallback pgrep -f gateway."""
+    try:
+        r = subprocess.run(["launchctl", "print", "gui/%d/ai.hermes.gateway" % os.getuid()],
+                           capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            return True
+    except Exception:
+        pass
+    try:
+        r = subprocess.run(["pgrep", "-f", "gateway"], capture_output=True, text=True, timeout=5)
+        return bool(r.stdout.strip())
+    except Exception:
+        return False
+
+def disco_livre_pct():
+    """Percentual livre do disco / (statvfs do ponto de montagem raiz, sem parsear o df)."""
+    try:
+        st = os.statvfs("/")
+        total = st.f_blocks * st.f_frsize
+        livre = st.f_bavail * st.f_frsize
+        if total <= 0:
+            return None
+        return round(100.0 * livre / total, 1)
+    except Exception:
+        return None
+
+def bateria_status():
+    """(pct, carregando) da bateria (mesma leitura do servidor: macOS e Linux), ou None sem bateria."""
+    try:
+        pct, carregando = server.bateria_ler()
+        return (pct, carregando) if pct is not None else None
+    except Exception:
+        return None
+
+
+def sala_porta():
+    """Porta HTTP do servidor da Sala: chave sala_porta do sala_config.json ou 8765."""
+    try:
+        cfg = server.ler_json(server.CONFIG)
+        p = (cfg or {}).get("sala_porta") if isinstance(cfg, dict) else None
+        return int(p) if p else 8765
+    except Exception:
+        return 8765
+
+
+def servidor_respondendo(porta, timeout=6):
+    """True se o servidor da Sala responde HTTP 200 em http://127.0.0.1:porta/api/state."""
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:%d/api/state" % porta, timeout=timeout) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+def aplicar_ajustes():
+    """Intervalo entre avisos e endereço da Sala vindos da tela AJUSTES DA SALA (sala_config.json)."""
+    global INTERVALO_AVISO_S, ENDERECO_SALA
+    try:
+        v = server.sala_ajustes.valores(server.CONFIG)
+        INTERVALO_AVISO_S = int(v["aviso_intervalo_min"]) * 60
+        ENDERECO_SALA = "http://127.0.0.1:%d" % int(v["sala_porta"])
+    except Exception:
+        pass
+
+
 def main(argv=()):
+    aplicar_ajustes()
     if "--teste" in argv:
         cfg = config_email()
         if not cfg:
@@ -315,22 +443,19 @@ def main(argv=()):
         sinal_de_vida("a Sala não respondeu (%s)" % e)
         return 1
     sinal_de_vida()   # só após foto() sucesso: se o vigia travar, o sinal de vida para de ser atualizado
-    # Avisos de infraestrutura (gateway parado, disco cheio, bateria baixa) — cada um entra no saude (faixa âmbar) e gera 1 e-mail por rodada
-    try:
-        import subprocess, os as _os
-        gw = subprocess.run(["launchctl","print","gui/%d/ai.hermes.gateway"%_os.getuid()],capture_output=True,text=True,timeout=5)
-        if gw.returncode!=0 and subprocess.run(["pgrep","-f","gateway"],capture_output=True,text=True,timeout=5).returncode!=0:
-            problema("gateway","gateway parado: jobs agendados não disparam","gateway stopped: scheduled jobs do not fire")
-        st = _os.statvfs("/")
-        livre_pct = st.f_bavail * 100.0 / st.f_blocks
-        if livre_pct < 10:
-            problema("disco","disco com %.0f%% livre: risco de falha na gravação"%livre_pct,"disk at %.0f%% free: risk of write failure"%livre_pct)
-        batt = subprocess.run(["pmset","-g","batt"],capture_output=True,text=True,timeout=5)
-        m = re.search(r"(\d+)%.*; (charging|discharging)",batt.stdout)
-        if m and int(m.group(1))<20 and m.group(2)=="discharging":
-            problema("bateria","Mac na bateria a %.0f%% e sem carregador"%int(m.group(1)),"Mac on battery at %d%% and not charging"%int(m.group(1)))
-    except Exception:
-        pass
+    # Verificações de infraestrutura (cada rodada de 5 min): entram no saude do retrato e seguem a regra do vigia
+    # (1 aviso por estação a cada 30 min; não reenvia se não mudou).
+    saude = b.setdefault("saude", {})
+    if not gateway_rodando():
+        saude["gateway"] = "gateway parado: jobs agendados não disparam"
+    livre = disco_livre_pct()
+    if livre is not None and livre < 10:
+        saude["disco"] = "disco cheio: %s%% livre em /" % livre
+    bat = bateria_status()
+    if bat and bat[0] is not None and bat[0] < 20 and not bat[1]:
+        saude["bateria"] = "Mac na bateria baixa: %s%%" % bat[0]
+    if not servidor_respondendo(sala_porta()):
+        saude["servidor_parado"] = "servidor da Sala não responde: painel não está atualizando"
     try:
         a = server.ler_json(BASE)
     except FileNotFoundError:
